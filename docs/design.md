@@ -1,7 +1,10 @@
 # Design
 
-Planned architecture of the MZ-2500 / MZ-2520 core. Status: bootstrap. Only the clocking, the video timing (with a test
-pattern) and a T80 running a stub program exist. Hardware facts are in [hardware.md](hardware.md); this file is about how
+Architecture of the MZ-2500 / MZ-2520 core. Status: milestone 1 (the real IPL reaches its first screen in the
+simulation; README.md). The CPU, MMU, waits, I/O decode, 8255, PIO, OPN/FDC stubs live in `rtl/mz2500.sv`; video in
+`rtl/mz2500_video.sv`; the 8253, interrupt block and keyboard in their own files. The 8255, 8253 and PIO are new
+SystemVerilog rather than the copied VHDL: they take one-clock bus strobes at the end of each cycle, which the VHDL
+versions (enable-gated read/write levels) would see several times. Hardware facts are in [hardware.md](hardware.md); this file is about how
 the core will be built.
 
 ## Goals and non-goals

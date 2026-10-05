@@ -46,6 +46,8 @@ struct Options {
     std::string trace_file;               // --trace-cpu
     std::string io_file;                  // --trace-io
     uint32_t    trace_from = 0, trace_to = 0xFFFFFFFF;
+    std::string rom_file;                 // --rom: boot.rom image (IPL at 0, kanji at 0x10000)
+    std::string ipl_file, kanji_file;     // --ipl / --kanji: separate ROM files
 };
 
 static void usage()
@@ -65,6 +67,8 @@ static void usage()
 "  --trace-cpu FILE       PC of each instruction fetch (M1)\n"
 "  --trace-io FILE        each I/O write: frame,pc,port,data\n"
 "  --trace-from N         start tracing at frame N; --trace-to N stops after frame N\n"
+"  --rom FILE             boot.rom image: IPL at 000000, kanji ROM at 010000 (tools/make_bootrom.sh)\n"
+"  --ipl FILE, --kanji FILE   load IPL.ROM / KANJI.ROM separately (default: ../software/roms/extracted/...)\n"
 "fb_hash is FNV-1a 32 over the RGB888 bytes of the active picture.\n");
 }
 
@@ -109,6 +113,9 @@ static bool parse_args(int argc, char **argv, Options &o)
         else if (a == "--trace-io") o.io_file = next();
         else if (a == "--trace-from") o.trace_from = parse_num(next());
         else if (a == "--trace-to") o.trace_to = parse_num(next());
+        else if (a == "--rom") o.rom_file = next();
+        else if (a == "--ipl") o.ipl_file = next();
+        else if (a == "--kanji") o.kanji_file = next();
         else { fprintf(stderr, "unknown option %s (try --help)\n", a.c_str()); return false; }
     }
     return true;
@@ -148,7 +155,55 @@ private:
     bool want_png(uint32_t f) const;
     void write_png(uint32_t f);
     void schedule_typing();
+    bool load_roms();
+    void ioctl_load(uint32_t base, const std::vector<uint8_t> &data);
 };
+
+static bool read_file(const std::string &name, std::vector<uint8_t> &out)
+{
+    FILE *f = fopen(name.c_str(), "rb");
+    if (!f) return false;
+    uint8_t buf[65536];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) out.insert(out.end(), buf, buf + n);
+    fclose(f);
+    return true;
+}
+
+// hps_io style download: one byte every 4 clocks, machine held in reset by ioctl_download.
+void Sim::ioctl_load(uint32_t base, const std::vector<uint8_t> &data)
+{
+    top->ioctl_download = 1;
+    for (size_t i = 0; i < data.size(); i++) {
+        top->ioctl_addr = base + (uint32_t)i;
+        top->ioctl_dout = data[i];
+        top->ioctl_wr = 1;
+        clock();
+        top->ioctl_wr = 0;
+        clock(); clock(); clock();
+    }
+    top->ioctl_download = 0;
+}
+
+bool Sim::load_roms()
+{
+    std::vector<uint8_t> d;
+    if (!opt.rom_file.empty()) {
+        if (!read_file(opt.rom_file, d)) { fprintf(stderr, "cannot read %s\n", opt.rom_file.c_str()); return false; }
+        if (d.size() > 0x50000) d.resize(0x50000);
+        ioctl_load(0, d);
+        return true;
+    }
+    std::string ipl = opt.ipl_file.empty() ? "../software/roms/extracted/IPL/IPL.ROM" : opt.ipl_file;
+    std::string kanji = opt.kanji_file.empty() ? "../software/roms/extracted/KANJI/KANJI.ROM" : opt.kanji_file;
+    if (!read_file(ipl, d)) { fprintf(stderr, "cannot read IPL ROM %s (see docs/roms.md)\n", ipl.c_str()); return false; }
+    d.resize(0x8000, 0xFF);
+    ioctl_load(0, d);
+    d.clear();
+    if (!read_file(kanji, d)) fprintf(stderr, "warning: no kanji ROM %s: no text font\n", kanji.c_str());
+    else { d.resize(0x40000, 0xFF); ioctl_load(0x10000, d); }
+    return true;
+}
 
 void Sim::clock()
 {
@@ -289,6 +344,9 @@ int Sim::run()
     top->reset = 1;
     top->lines400 = opt.lines400;
     top->ps2_key = 0;
+    top->ioctl_download = 0; top->ioctl_wr = 0;
+    for (int i = 0; i < 256; i++) clock();
+    if (!load_roms()) return 2;
     for (int i = 0; i < 256; i++) clock();
     top->reset = 0;
     // Discard the partial picture before the first full frame.

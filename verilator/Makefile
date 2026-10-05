@@ -41,7 +41,8 @@ VHD_SRC = $(T80_SRC)
 # One netlist per VHDL entity the SystemVerilog instantiates.
 GEN_V = $(GEN)/t80se.v
 
-SV_SRC = sim.v $(RTL)/mz2500.sv
+SV_SRC = sim.v $(RTL)/mz2500.sv $(RTL)/mz2500_video.sv $(RTL)/mz2500_int.sv $(RTL)/mz2500_kbd.sv \
+	$(RTL)/mz_pit8253.sv $(RTL)/dpram.sv
 V_SRC  = $(SV_SRC) $(GEN_V)
 
 V_OPT = -O3 --x-assign fast --x-initial fast --noassert \

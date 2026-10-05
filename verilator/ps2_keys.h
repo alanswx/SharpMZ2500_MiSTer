@@ -46,7 +46,7 @@ static bool ps2_from_name(const std::string &n, Ps2Key &k)
 {
     static const struct { const char *name; uint8_t code; bool ext; bool shift; } tab[] = {
         {"RETURN",0x5A,0,0}, {"ENTER",0x5A,0,0}, {"SPACE",0x29,0,0},
-        {"BREAK",0x76,0,0},  {"ESC",0x76,0,0},
+        {"BREAK",0x69,1,0},  {"ESC",0x76,0,0},  {"HELP",0x78,0,0}, {"COPY",0x07,0,0},
         {"DEL",0x66,0,0},    {"BS",0x66,0,0},    {"INS",0x70,1,0},
         {"HOME",0x6C,1,0},   {"CLR",0x6C,1,1},
         {"UP",0x75,1,0},     {"DOWN",0x72,1,0},  {"LEFT",0x6B,1,0}, {"RIGHT",0x74,1,0},

@@ -7,34 +7,46 @@ kanji ROM, and an MZ-80B / MZ-2000 compatible mode.
 Sister project of [SharpMZ_MiSTer](https://github.com/alanswx/SharpMZ_MiSTer) (MZ-80K to MZ-2000), with which it
 shares the T80, 8255, 8253, Z80 PIO, floppy and tape RTL.
 
-## Status: bootstrap
+## Status: the real IPL boots to its first screen (simulation)
 
-Nothing of the MZ-2500 runs yet. What exists:
+With the real IPL and kanji ROMs, the Verilator simulation powers on, runs the IPL (it copies itself to RAM and
+restarts there through the 8255 "special reset"), probes the floppy and tape, and shows its "loading error / Press F
+or C" screen. The 400-line picture is identical pixel for pixel to BubiZ-2500's (CSP core) and the 200-line one to
+MAME's, and it appears at frame 381 (BubiZ: about 372).
 
-- Template_MiSTer `sys/`, a top level (`SharpMZ2500.sv`) with a placeholder menu, the PLL (85.909 MHz) and a
-  machine module (`rtl/mz2500.sv`) that outputs MZ-2500 video timing (400 and 200 lines) with a test pattern and runs a
-  T80 on a stub program. It builds in Quartus 17.0.
-- A Verilator simulation (`verilator/`) of the same machine module, with PNG screenshots, frame hashes and CPU/IO traces.
-- Research: hardware reference, ROM list, software sources and reference emulators in `docs/`. The reference
-  emulator is BubiZ-2500 (Takeda's EmuZ-2500 core with a headless mode), with MAME as a second opinion; both run
-  headless on macOS (docs/emulators.md).
+What exists (`rtl/`): Z80 with CSP's wait states, the MMU and its reset maps, main RAM / IPL / kanji ROM in block RAM
+loaded from `boot.rom`, the text CRTC and graphics controller with text VRAM, PCG and graphics VRAM (16-colour modes,
+RMW window, clear, scroll, palette and priority), the interrupt block, 8253, 8255, Z80 PIO and the keyboard matrix,
+and stubs for the OPN registers and the floppy controller. No floppy, tape, sound, RTC, mouse, 256/4096-colour
+graphics or MZ-80B/2000 modes yet: see [TODO.md](TODO.md).
 
-Next: milestone 1 in [TODO.md](TODO.md): the real IPL reaching its first screen in the simulation, checked against
-the reference emulator.
+ROMs: build `boot.rom` from your dumps with `tools/make_bootrom.sh IPL.ROM KANJI.ROM boot.rom` (CRCs in
+docs/roms.md) and put it in `games/SharpMZ2500/` on the SD card; the sim reads `software/roms/extracted/` by default
+or `--rom boot.rom`.
+
+Research: hardware reference, ROM list, software sources and reference emulators in `docs/`. The reference
+emulator is BubiZ-2500 (Takeda's EmuZ-2500 core with a headless mode), with MAME as a second opinion; both run
+headless on macOS (docs/emulators.md).
+
+Next: the floppy controller (phase 6 in [TODO.md](TODO.md)) to boot disks, then sound.
 
 ## Layout
 
 | Path | Content |
 |---|---|
 | `SharpMZ2500.sv` | MiSTer `emu` top: OSD, hps_io, PLL, video mixer |
-| `SharpMZ2500.qsf`, `.qpf`, `files.qip` | Quartus project (add source files to `files.qip`, not in the IDE) |
-| `rtl/mz2500.sv` | The machine (shared by the core and the simulation) |
-| `rtl/T80`, `rtl/i8255`, `rtl/i8254`, `rtl/z8420` | VHDL chips shared with SharpMZ_MiSTer |
+| `SharpMZ2500.qsf`, `.qpf`, `.sdc`, `.srf` | Template_MiSTer's `Template.*` files, unmodified (`.qpf`: only the revision name). Don't edit them: update them from the template |
+| `files.qip` | The core's source list (add files here, not in the IDE) |
+| `rtl/mz2500.sv` | The machine (shared by the core and the simulation): CPU, waits, MMU, memories, I/O decode, small devices |
+| `rtl/mz2500_video.sv` | Raster, text CRTC, graphics controller, VRAMs, mixer |
+| `rtl/mz2500_int.sv`, `rtl/mz_pit8253.sv`, `rtl/mz2500_kbd.sv`, `rtl/dpram.sv` | Interrupt block, 8253, keyboard matrix, block RAMs |
+| `rtl/T80` | Z80 (VHDL, shared with SharpMZ_MiSTer). `rtl/i8255`, `rtl/i8254`, `rtl/z8420` are copied but not used (SV versions are simpler to drive from bus strobes) |
 | `rtl/pll*` | 50 MHz to 85.909091 MHz |
 | `sys/` | Template_MiSTer framework (do not edit) |
 | `verilator/` | Headless simulation, regression tests ([README](verilator/README.md)) |
 | `docs/` | [hardware](docs/hardware.md), [design](docs/design.md), [references](docs/references.md), [emulators](docs/emulators.md), [ROMs](docs/roms.md), [software](docs/software.md), [FPGA blocks](docs/fpga_blocks.md) |
 | `tools/fetch_refs.sh` | Fetches the reference emulators and documents into `refs/`; `--roms DIR` copies and CRC-checks local ROMs |
+| `tools/make_bootrom.sh` | Builds `boot.rom` (IPL + kanji) from ROM dumps, CRC-checked |
 | `tools/mame_snap.lua` | MAME autoboot script: snapshot and RAM/VRAM dumps at frame N, for headless comparison |
 | `refs/`, `software/` | Local only (gitignored): emulator sources, documents, ROMs, disk images. Their READMEs list every item and where it came from. |
 
@@ -59,7 +71,8 @@ quartus_sh --flow compile SharpMZ2500        # -> output_files/SharpMZ2500.rbf
 On a Mac, the Apple container scripts in `~/dev2/apple-containers-example` run the same flow
 (`scripts/quartus-core-apple.sh /path/to/SharpMZ2500_MiSTer`). `build_id.v` is generated by `sys/build_id.tcl`
 (pre-flow script) and is not committed. Quartus writes the assignments from `sys/*.tcl` into the `.qsf` during a
-build; don't commit that (`git checkout SharpMZ2500.qsf`).
+build; don't commit that (`git checkout SharpMZ2500.qsf`). The `.qsf`, `.sdc`, `.srf` and `sys/` are Template_MiSTer
+master as of commit 3ea1134 (2026-08-26), byte for byte.
 
 The bootstrap build: 8,964 ALMs (21 %), 636 kbit block RAM (11 %, all of it the framework), timing met
 (clk_sys 85.90909 MHz, worst setup slack 0.53 ns in the framework's HDMI PLL domain); about 10 minutes in the Apple
@@ -70,7 +83,7 @@ Simulation:
 ```
 cd verilator
 make && make test
-./obj_dir_headless/Vtop --stop-at-frame 60 --screenshot 60     # -> out/frame_000060.png
+./obj_dir_headless/Vtop --stop-at-frame 400 --screenshot 400   # -> out/frame_000400.png, the IPL screen
 ```
 
 ## Licence

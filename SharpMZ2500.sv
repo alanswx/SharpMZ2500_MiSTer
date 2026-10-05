@@ -73,7 +73,7 @@ localparam CONF_STR =
 {
 	"SharpMZ2500;;",
 	"-;",
-	"-,Bootstrap: test pattern only;",
+	"-,Needs games/SharpMZ2500/boot.rom (IPL + kanji);",
 	"-;",
 	"O[1],Lines (front switch),400 (24 kHz),200 (15 kHz);",
 	"O[3:2],Boot Mode,MZ-2500,MZ-2000,MZ-80B;",
@@ -158,6 +158,11 @@ mz2500 mz2500
 	.reset(reset),
 	.lines400(lines400),
 	.ps2_key(ps2_key),
+
+	.ioctl_download(ioctl_download && ioctl_index == 16'd0),
+	.ioctl_wr(ioctl_wr),
+	.ioctl_addr(ioctl_addr[24:0]),
+	.ioctl_dout(ioctl_dout),
 
 	.ce_pix(ce_pix),
 	.R(R), .G(G), .B(B),

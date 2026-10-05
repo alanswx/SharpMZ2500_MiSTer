@@ -1,30 +1,33 @@
 #!/bin/bash
 # Regression tests for the MZ-2500 simulation. Run from verilator/ (make test).
 #
-# Bootstrap tests (the machine is still a test pattern):
-#   pattern_400   400-line timing: 640x400 frames; frame hash at frame 60 matches tests/expected/pattern_400.txt
-#   pattern_200   200-line timing: 640x200 frames; frame hash at frame 30
-#   cpu_alive     the T80 stub program OUTs 00, 01, 02, 03 to port 00 within 60 frames
+#   ipl_400   real IPL, 400-line monitor, no media: "loading error / Press F or C" screen. Frame hash at frame 400.
+#             The picture is identical, pixel for pixel, to BubiZ-2500's (CSP core) screenshot of the same screen
+#             (refs/compare/bubiz_ipl_nodisk_f600.png).
+#   ipl_200   the same with the 200-line switch, frame 450; identical to MAME's 640x200 screenshot
+#             (refs/compare/mame_ipl_nodisk_f1500.png).
 #
-# Planned (TODO.md): ipl_boot (IPL first screen, compared with the reference emulator), kb_*, fdd_*, etc.
+# Needs the IPL and kanji ROMs in ../software/roms/extracted/ (docs/roms.md), or set ROM=path/to/boot.rom.
 # Tests run in parallel; each writes to out/test/<name>.log. Set UPDATE=1 to rewrite the expected files.
+# Each IPL test takes about 3 minutes (the sim runs at about 2.3 frames per second).
 
 cd "$(dirname "$0")"
 BIN=${BIN:-./obj_dir_headless/Vtop}
 OUT=${OUT:-out/test}
 EXP=tests/expected
+ROMARG=()
+[ -n "$ROM" ] && ROMARG=(--rom "$ROM")
 mkdir -p "$OUT"
 
 pids=(); names=()
 run() {   # run NAME ARGS...
     local name=$1; shift
-    ( $BIN --quiet --out "$OUT/$name" "$@" > "$OUT/$name.out" 2> "$OUT/$name.log" ) &
+    ( $BIN --quiet "${ROMARG[@]}" --out "$OUT/$name" "$@" > "$OUT/$name.out" 2> "$OUT/$name.log" ) &
     pids+=($!); names+=("$name")
 }
 
-run pattern_400 --lines 400 --stop-at-frame 60 --frame-log "$OUT/pattern_400.csv"
-run pattern_200 --lines 200 --stop-at-frame 30 --frame-log "$OUT/pattern_200.csv"
-run cpu_alive   --stop-at-frame 60 --trace-io "$OUT/cpu_alive.csv"
+run ipl_400 --lines 400 --stop-at-frame 400 --screenshot 400 --frame-log "$OUT/ipl_400.csv"
+run ipl_200 --lines 200 --stop-at-frame 450 --screenshot 450 --frame-log "$OUT/ipl_200.csv"
 
 fail=0
 for i in "${!pids[@]}"; do
@@ -41,8 +44,7 @@ check() {   # check NAME ACTUAL
     else echo "FAIL $name: got '$actual', expected '$(cat "$EXP/$name.txt" 2>/dev/null)'"; fail=1; fi
 }
 
-check pattern_400 "$(hash_at "$OUT/pattern_400.csv" 60)"
-check pattern_200 "$(hash_at "$OUT/pattern_200.csv" 30)"
-check cpu_alive   "$(awk -F, 'NR > 1 && $3 == "00" { printf "%s ", $4 }' "$OUT/cpu_alive.csv" | head -c 12)"
+check ipl_400 "$(hash_at "$OUT/ipl_400.csv" 400)"
+check ipl_200 "$(hash_at "$OUT/ipl_200.csv" 450)"
 
 exit $fail

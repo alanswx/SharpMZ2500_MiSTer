@@ -1,8 +1,8 @@
 `timescale 1ns/1ns
 //
 // Simulation top for the MZ-2500 core: the machine (rtl/mz2500.sv) with its ports made visible to the C++
-// harness (sim_headless.cpp). It stands in for SharpMZ2500.sv; the harness plays hps_io (ps2_key, later the
-// ioctl ROM download and the sd_* floppy bus).
+// harness (sim_headless.cpp). It stands in for SharpMZ2500.sv; the harness plays hps_io (ps2_key, the ioctl
+// ROM download, later the sd_* floppy bus).
 //
 // VHDL leaves (T80 and later the 8255/8253/PIO) come in as a Verilog netlist made by "ghdl synth" (Makefile).
 //
@@ -25,6 +25,11 @@ module top(
 
    input  [10:0] ps2_key,
 
+   input         ioctl_download,
+   input         ioctl_wr,
+   input  [24:0] ioctl_addr,
+   input   [7:0] ioctl_dout,
+
    output [15:0] cpu_pc /*verilator public_flat*/,
    output        cpu_ce /*verilator public_flat*/,
    output        cpu_m1_n /*verilator public_flat*/,
@@ -39,6 +44,11 @@ mz2500 mz2500
    .reset(reset),
    .lines400(lines400),
    .ps2_key(ps2_key),
+
+   .ioctl_download(ioctl_download),
+   .ioctl_wr(ioctl_wr),
+   .ioctl_addr(ioctl_addr),
+   .ioctl_dout(ioctl_dout),
 
    .ce_pix(ce_pix),
    .R(VGA_R), .G(VGA_G), .B(VGA_B),

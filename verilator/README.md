@@ -16,8 +16,7 @@ Requires `verilator` 5.x, `ghdl` 5.x with `synth` (Homebrew's `ghdl` has it) and
 
 - `sim.v` is the simulation top (`top`). It stands in for `SharpMZ2500.sv` and instantiates the same machine,
   `rtl/mz2500.sv`, so the core and the sim share all machine RTL. The C++ harness plays the part of hps_io.
-- The machine RTL is SystemVerilog. The VHDL leaves shared with SharpMZ_MiSTer (T80 now; the 8255, 8253 and Z80
-  PIO when they are wired up) are converted by `ghdl synth --out=verilog`, one netlist per entity in `gen/`.
+- The machine RTL is SystemVerilog. The only VHDL leaf is the T80, shared with SharpMZ_MiSTer; it is converted by `ghdl synth --out=verilog`, one netlist per entity in `gen/`.
   GHDL fixes the generics at synthesis time, so the Makefile passes the same `-g` values as the RTL instance, and
   `rtl/mz2500.sv` leaves the generic map out under `` `ifdef VERILATOR ``. Keep the two in step.
 - `fix_port_aliases.py` (from SharpMZ_MiSTer) restores port-alias assignments that ghdl's Verilog writer drops;
@@ -35,14 +34,18 @@ Requires `verilator` 5.x, `ghdl` 5.x with `synth` (Homebrew's `ghdl` has it) and
   --screenshot N         PNG of frame N (repeatable); --dump-frames A:B; --dump-every K; --out DIR
   --frame-log FILE       frame,fb_hash,cpu_cycles,pc per frame (fb_hash = FNV-1a over the RGB888 picture)
   --trace-cpu FILE       PC at each M1; --trace-io FILE: each I/O write; --trace-from/--trace-to N
+  --rom FILE             boot.rom (IPL at 0, kanji at 10000h); or --ipl FILE --kanji FILE
+                         (default ../software/roms/extracted/IPL/IPL.ROM and KANJI/KANJI.ROM)
 ```
 
 Frames are counted from the first full frame after reset and end when vertical blanking starts. A PNG is the active
 picture as the core outputs it: 640x400 in 400-line mode, 640x200 in 200-line mode.
 
-Speed: 60 frames (1.1 s emulated, 95 M clk_sys cycles) take about 25 s of CPU on an M4 Max, about 3.8 M clk_sys cycles
-per second with the bootstrap design. Expect it to slow down as the machine grows; a `make fast` build at a reduced
-clk_sys, as SharpMZ has, is an option later.
+The ROMs go in through the same ioctl download port the MiSTer uses (one byte per 4 clocks, machine in reset), so
+frame 0 starts after that.
+
+Speed: about 2.3 frames per second (3.8 M clk_sys cycles per second of CPU) on an M4 Max: 400 frames, the IPL's first
+screen, take 3 minutes. A `make fast` build at a reduced clk_sys, as SharpMZ has, or Verilator threads are options.
 
 ## Tests
 
@@ -51,12 +54,12 @@ the expected files (check the PNGs first).
 
 | Test | Checks |
 |---|---|
-| `pattern_400` | 400-line timing and test pattern: frame hash at frame 60 |
-| `pattern_200` | 200-line timing: frame hash at frame 30 |
-| `cpu_alive` | the T80 stub program writes 00, 01, 02, 03 to port 00 |
+| `ipl_400` | real IPL, 400 lines, no media: frame 400 hash; the picture equals BubiZ-2500's screenshot pixel for pixel |
+| `ipl_200` | the same at 200 lines, frame 450; equals MAME's 640x200 screenshot |
 
-Planned, in TODO.md order: `ipl_boot` (the IPL's first screen, compared with the reference emulator's screenshot and
-its CPU trace), keyboard, floppy boot, graphics, sound and the MZ-80B/2000 modes.
+The tests need the ROMs (`software/roms/extracted/`, or `ROM=boot.rom make test`).
+
+Planned, in TODO.md order: keyboard, floppy boot, graphics, sound and the MZ-80B/2000 modes.
 
 ## Comparing with a reference emulator
 
