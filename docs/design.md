@@ -58,12 +58,16 @@ An accumulator-generated CPU enable is what SharpMZ_MiSTer's `clkgen` does; it k
 ## Video
 
 - One raster generator for both modes: 400 lines (864 x 448 dots, 24.86 kHz, 55.49 Hz) and 200 lines (896 x 262
-  dots, 15.98 kHz, 60.99 Hz). These numbers come from CSP/x1center (see hardware.md) and must be checked against the
-  CRTC register values the IPL programs.
+  dots, 15.98 kHz, 60.99 Hz), from CSP and x1center.org measurements (hardware.md section 2). Text and graphics have
+  separate display windows and blanking (text R03/R05/R07/R08; graphics GDEHS/GDEHE/GDEVS/GDEVE), and the CPU WAIT
+  logic needs both.
+- Follow CSP where MAME and CSP disagree (hardware.md section 13 lists 22 cases).
 - Text and graphics layers are fetched in parallel per character cell and merged with the priority register.
 - Graphics VRAM (128 KB, 4 planes x 32 KB) in block RAM, organised so one cycle reads all planes of an 8-pixel group.
-- Text VRAM, PCG RAM, CG ROM and palette in block RAM. Kanji glyphs come from SDRAM through a per-line prefetch into a
-  small block RAM (FM-7_MiSTer had to do the same).
+- Text VRAM, PCG RAM and palette in block RAM. There is no separate character generator: the ANK fonts (8x8 at 6010h,
+  8x16 at 6000h, the MZ-2000 font at 6018h, MZ-700 fonts) are in the kanji ROM (docs/roms.md), so the text raster
+  reads the kanji ROM from the first milestone. Kanji glyphs come from SDRAM through a per-line prefetch into a small
+  block RAM (FM-7_MiSTer had to do the same); the font region can stay in a block-RAM copy.
 - Output: `video_mixer` with the scandoubler only in 200-line mode (400-line mode is already 24.86 kHz; analogue output
   needs `vga_scaler=1` or a 24 kHz monitor). HDMI goes through the framework scaler in both modes.
 
@@ -75,10 +79,11 @@ An accumulator-generated CPU enable is what SharpMZ_MiSTer's `clkgen` does; it k
 | Graphics VRAM | 128 KB | block RAM (raster needs all planes every 8 dots) |
 | Text VRAM, PCG, attributes | about 14 KB | block RAM |
 | IPL | 32 KB | block RAM (loaded from SD at start, `boot.rom` style) |
-| CG ROM | 2 KB | block RAM |
-| Kanji 256 KB, kanji2 128 KB, dictionary 256 KB, phone 16 KB | 656 KB | SDRAM, loaded from SD |
+| Kanji ROM | 256 KB | block RAM until the SDRAM phase (2.1 Mbit; the sim and the first builds), then SDRAM with the font region and a glyph prefetch in block RAM |
+| Kanji2 128 KB, dictionary 256 KB, phone 16 KB | 400 KB | SDRAM, loaded from SD |
 
-Block RAM total about 1.5 Mbit of the DE10-Nano's 5.66 Mbit. ROMs are never embedded in the RBF (copyright): the menu
+Final block RAM use about 1.5 Mbit of the DE10-Nano's 5.66 Mbit plus the framework's 0.64 Mbit; with the whole kanji
+ROM in block RAM during bring-up about 3.6 Mbit, which still fits. ROMs are never embedded in the RBF (copyright): the menu
 loads them from `games/SharpMZ2500/` (boot0.rom..boot3.rom or F entries; to be decided, see TODO).
 
 A 6 MHz Z80 cycle is at least 500 ns, so the SDRAM serves the CPU in one slot and the kanji prefetch in another with
@@ -111,13 +116,14 @@ this driver) are references for behaviour; don't translate their code line by li
 | Block | Source | Licence |
 |---|---|---|
 | YM2203 | jotego jt12 (`jt03`), already integrated in `../FM-7_MiSTer/rtl/jt12` | GPL-3 |
-| RP5C15 | MSX / X68000 MiSTer cores, or written new (small) | see docs/references.md |
+| RP5C15 | X68000_MiSTer `rtl/rtc/rp5c15.vhd` (closest fit, but no licence: ask the author), Suska RP5C15 (LGPL-2.1+), or written new (small). Not the MSX one (non-commercial clause). | docs/fpga_blocks.md |
+| Z80 SIO | nothing reusable found; write a minimal channel B receiver + DTR for the mouse | |
 | SDRAM controller | sorgelig-style `sdram.sv` from a local MiSTer core | GPL-2+/3 |
 
 ## Verification
 
 1. Verilator sim first (`verilator/`), as SharpMZ did. Every milestone has a `run_tests.sh` test with an expected
    frame hash or trace.
-2. Reference emulator side by side (docs/emulators.md): same ROMs, same disk, screenshot at a fixed frame and an
+2. Reference emulator side by side (BubiZ-2500 headless, MAME + Lua; docs/emulators.md): same ROMs, same disk, screenshot at a fixed frame and an
    instruction trace from reset. The IPL's first few thousand instructions are the first exit test.
 3. Hardware on the MiSTer last, with the same images.

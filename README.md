@@ -15,7 +15,9 @@ Nothing of the MZ-2500 runs yet. What exists:
   machine module (`rtl/mz2500.sv`) that outputs MZ-2500 video timing (400 and 200 lines) with a test pattern and runs a
   T80 on a stub program. It builds in Quartus 17.0.
 - A Verilator simulation (`verilator/`) of the same machine module, with PNG screenshots, frame hashes and CPU/IO traces.
-- Research: hardware reference, ROM list, software sources and reference emulators in `docs/`.
+- Research: hardware reference, ROM list, software sources and reference emulators in `docs/`. The reference
+  emulator is BubiZ-2500 (Takeda's EmuZ-2500 core with a headless mode), with MAME as a second opinion; both run
+  headless on macOS (docs/emulators.md).
 
 Next: milestone 1 in [TODO.md](TODO.md): the real IPL reaching its first screen in the simulation, checked against
 the reference emulator.
@@ -31,8 +33,9 @@ the reference emulator.
 | `rtl/pll*` | 50 MHz to 85.909091 MHz |
 | `sys/` | Template_MiSTer framework (do not edit) |
 | `verilator/` | Headless simulation, regression tests ([README](verilator/README.md)) |
-| `docs/` | [hardware](docs/hardware.md), [design](docs/design.md), [references](docs/references.md), [emulators](docs/emulators.md), [ROMs](docs/roms.md), [software](docs/software.md) |
-| `tools/fetch_refs.sh` | Fetches the reference emulators and documents into `refs/` |
+| `docs/` | [hardware](docs/hardware.md), [design](docs/design.md), [references](docs/references.md), [emulators](docs/emulators.md), [ROMs](docs/roms.md), [software](docs/software.md), [FPGA blocks](docs/fpga_blocks.md) |
+| `tools/fetch_refs.sh` | Fetches the reference emulators and documents into `refs/`; `--roms DIR` copies and CRC-checks local ROMs |
+| `tools/mame_snap.lua` | MAME autoboot script: snapshot and RAM/VRAM dumps at frame N, for headless comparison |
 | `refs/`, `software/` | Local only (gitignored): emulator sources, documents, ROMs, disk images. Their READMEs list every item and where it came from. |
 
 ## Getting the references

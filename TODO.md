@@ -21,23 +21,26 @@ feasibility study (SharpMZ_MiSTer `docs/mz2500.md`): about 17-26 weeks to "runs 
 Goal: power on with the real `ipl.rom` and reach the IPL's first screen (boot menu / "Make ready" prompt), with the
 CPU trace from reset matching the reference emulator for the first few thousand instructions.
 
-- [ ] Reference emulator runs headless: screenshot at frame N and a PC trace from reset (docs/emulators.md)
-- [ ] ROM loading: IPL (32 KB) and CG (2 KB) into block RAM from ioctl (hps_io index 0 / boot.rom), and from
-      `--rom` / `--cg` in the sim harness
-- [ ] T80 at 6 MHz with the M1 wait state; clock enable module `mz2500_clocks`
+- [x] Reference emulator runs headless: BubiZ-2500 (CSP core) `-headless N -screenshot`, MAME `-video none` + Lua
+      (docs/emulators.md); golden IPL frames in refs/compare/
+- [ ] PC trace from reset out of the reference (MAME Lua or a small harness around BubiZ's vendored CSP core)
+- [ ] ROM loading: IPL (32 KB) and kanji ROM (256 KB; it holds the text fonts, see docs/roms.md: no CG ROM is
+      needed) into block RAM from ioctl (hps_io index 0 / boot.rom), and from `--ipl` / `--kanji` in the sim harness
+- [ ] T80 at 6 MHz with the M1 wait state (other waits: docs/hardware.md section 2); clock enable module `mz2500_clocks`
 - [ ] MMU, minimal: page registers B4/B5, mode B7, IPL reset map (pages 34-37 at 0000-7FFF), main RAM in block RAM
       for now (128 KB fits while nothing else is there; move to SDRAM in the SDRAM phase)
 - [ ] I/O decode skeleton with a trace of unhandled ports (`--trace-io` lists them)
 - [ ] 8255 (E0-E3), 8253 (E4-E7), Z80 PIO (E8-EB) wired; OPN port B returning the mode and 200/400-line switches
       (stub OPN until the sound phase)
 - [ ] Interrupt vector registers C6/C7, IM 2 acknowledge
-- [ ] Text CRTC, enough for the IPL: 80 x 25 in 400-line mode, CG ROM glyphs, 8 colours, cursor
+- [ ] Text CRTC, enough for the IPL: 80 x 25 in 400-line mode, ANK 8x16 font from the kanji ROM (6000h), 8 colours,
+      cursor. Expected first screen without media: "loading error / Press F or C" (refs/compare/bubiz_ipl_nodisk_f600.png)
 - [ ] `ipl_boot` test: trace equal to the reference for N instructions; screenshot compared by eye, then hashed
 
 ## Phase 2: memory and MMU, complete
 
-- [ ] All MMU pages: main RAM 00-1F (256 KB), graphics VRAM 20-2F, VRAM plane window 30-33, IPL 34-37, text VRAM 38,
-      kanji/PCG 39, dictionary 3A (bank port CE), phone ROM 3C-3F
+- [ ] All MMU pages: main RAM 00-1F (256 KB), graphics VRAM 20-2F, VRAM read-modify-write window 30-33 (CSP layout:
+      32 KB per plane), IPL 34-37, text VRAM 38, kanji/PCG 39, dictionary 3A (bank port CE), phone ROM 3C-3F
 - [ ] Special reset vs IPL reset maps; mode register B7 for the MZ-80B/2000 layouts
 - [ ] Memory test program (assembled in `verilator/tests/`, loaded through a debug load path like SharpMZ's
       `direct_start`)
@@ -48,12 +51,13 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 - [ ] PCG RAM and combine modes
 - [ ] Hardware scroll, text window
 - [ ] 200-line timing and the front-panel switch (OSD), 400-line timing values confirmed from the CRTC registers
-- [ ] VRAM wait states during display
+- [ ] Display-period WAIT for text VRAM/PCG (text CRTC blanking) and GVRAM (graphics blanking), page and I/O waits
 
 ## Phase 4: video, graphics
 
 - [ ] Graphics VRAM in block RAM, 4 (8) planes read per 8-pixel group
-- [ ] Modes: 640 x 400 x 4, 640 x 200 x 16 (2 screens), 320 x 200 x 16 (2 screens), 320 x 200 x 256
+- [ ] Modes (graphics register 0Eh, CSP's full set incl. 93/94/95/9D/19/99): 640 x 400 x 4, 640 x 200 x 16 (2 screens),
+      320 x 200 x 16 (2 screens), 320 x 200 x 256; split scroll (SAD0-2, SLN1)
 - [ ] Windowed display, dot scroll in X and Y, text/graphics priority
 - [ ] Plane latches and compare read (BC-BF), the plane window pages 30-33
 - [ ] Palettes: 16-colour digital, 256-colour `GGRRBBII` with plane enables, 4096-colour analogue (AE)
