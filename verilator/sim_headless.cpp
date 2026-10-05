@@ -1,0 +1,321 @@
+// Headless MZ-2500 simulation: run frames, type keys, capture PNG screenshots and frame hashes.
+//
+// Same organisation and option names as SharpMZ_MiSTer's verilator/sim_headless.cpp, so the regression
+// scripts and habits carry over. Examples:
+//
+//   ./obj_dir_headless/Vtop --stop-at-frame 60 --screenshot 60
+//   ./obj_dir_headless/Vtop --lines 200 --stop-at-frame 30 --frame-log out/frames.csv --trace-io out/io.csv
+//   ./obj_dir_headless/Vtop --type '100:LOAD\n' --stop-at-frame 400 --dump-every 50
+//
+// A frame ends when vertical blanking starts; frame 0 is the first one after reset. Each PNG is the active
+// (unblanked) picture as the core outputs it: 640x400 in 400-line mode, 640x200 in 200-line mode.
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstdint>
+#include <string>
+#include <vector>
+#include <set>
+#include <map>
+#include <deque>
+#include <sys/stat.h>
+
+#include "Vtop.h"
+#include "verilated.h"
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+#include "ps2_keys.h"
+
+static const double CLK_HZ = 85909091.0;   // clk_sys (24 x 3.579545 MHz)
+
+struct TypeCmd { uint32_t frame; std::string text; };
+
+struct Options {
+    bool        lines400 = true;          // --lines 400|200 (front-panel switch)
+    uint32_t    stop_frame = 60;
+    bool        quiet = false;
+    std::set<uint32_t> screenshots;       // --screenshot N
+    bool        dump_range = false;
+    uint32_t    dump_from = 0, dump_to = 0;
+    uint32_t    dump_every = 0;
+    std::string out_dir = "out";
+    std::string frame_log;
+    std::vector<TypeCmd> types;
+    uint32_t    type_press = 3, type_release = 3;
+    std::string trace_file;               // --trace-cpu
+    std::string io_file;                  // --trace-io
+    uint32_t    trace_from = 0, trace_to = 0xFFFFFFFF;
+};
+
+static void usage()
+{
+    fprintf(stderr,
+"usage: Vtop [options]\n"
+"  --lines 400|200        front-panel display switch (default 400: 24.86 kHz; 200: 15.98 kHz)\n"
+"  --stop-at-frame N      exit after frame N (default 60)\n"
+"  --quiet                no progress on stderr\n"
+"  --type FRAME:TEXT      type TEXT from FRAME; \\n or {RETURN}, {BREAK}, {DEL}, {WAITn} ...\n"
+"  --type-rate P:R        frames per key press:release (default 3:3)\n"
+"  --screenshot N         PNG of frame N (repeatable)\n"
+"  --dump-frames A:B      PNG of every frame A..B\n"
+"  --dump-every K         PNG of every Kth frame\n"
+"  --out DIR              output directory (default ./out)\n"
+"  --frame-log FILE       frame,fb_hash,cpu_cycles,pc per frame\n"
+"  --trace-cpu FILE       PC of each instruction fetch (M1)\n"
+"  --trace-io FILE        each I/O write: frame,pc,port,data\n"
+"  --trace-from N         start tracing at frame N; --trace-to N stops after frame N\n"
+"fb_hash is FNV-1a 32 over the RGB888 bytes of the active picture.\n");
+}
+
+static uint32_t parse_num(const std::string &s) { return (uint32_t)std::stoul(s, nullptr, 0); }
+
+static bool parse_args(int argc, char **argv, Options &o)
+{
+    for (int i = 1; i < argc; i++) {
+        std::string a = argv[i];
+        auto next = [&]() -> std::string {
+            if (i + 1 >= argc) { fprintf(stderr, "%s needs an argument\n", a.c_str()); exit(2); }
+            return argv[++i];
+        };
+        if (a == "--help" || a == "-h") { usage(); exit(0); }
+        else if (a == "--headless") {}
+        else if (a == "--lines") o.lines400 = next() != "200";
+        else if (a == "--stop-at-frame") o.stop_frame = parse_num(next());
+        else if (a == "--quiet") o.quiet = true;
+        else if (a == "--type") {
+            std::string s = next();
+            size_t c = s.find(':');
+            if (c == std::string::npos) { fprintf(stderr, "--type wants FRAME:TEXT\n"); return false; }
+            o.types.push_back({parse_num(s.substr(0, c)), s.substr(c + 1)});
+        }
+        else if (a == "--type-rate") {
+            std::string s = next();
+            size_t c = s.find(':');
+            if (c == std::string::npos) { fprintf(stderr, "--type-rate wants P:R\n"); return false; }
+            o.type_press = parse_num(s.substr(0, c)); o.type_release = parse_num(s.substr(c + 1));
+        }
+        else if (a == "--screenshot") o.screenshots.insert(parse_num(next()));
+        else if (a == "--dump-frames") {
+            std::string s = next();
+            size_t c = s.find(':');
+            if (c == std::string::npos) { fprintf(stderr, "--dump-frames wants A:B\n"); return false; }
+            o.dump_range = true; o.dump_from = parse_num(s.substr(0, c)); o.dump_to = parse_num(s.substr(c + 1));
+        }
+        else if (a == "--dump-every") o.dump_every = parse_num(next());
+        else if (a == "--out") o.out_dir = next();
+        else if (a == "--frame-log") o.frame_log = next();
+        else if (a == "--trace-cpu") o.trace_file = next();
+        else if (a == "--trace-io") o.io_file = next();
+        else if (a == "--trace-from") o.trace_from = parse_num(next());
+        else if (a == "--trace-to") o.trace_to = parse_num(next());
+        else { fprintf(stderr, "unknown option %s (try --help)\n", a.c_str()); return false; }
+    }
+    return true;
+}
+
+struct Ps2Event { uint8_t code; bool ext; bool press; };
+
+class Sim {
+public:
+    explicit Sim(const Options &o) : opt(o) { top = new Vtop; }
+    ~Sim() { top->final(); delete top; }
+    int run();
+
+private:
+    const Options &opt;
+    Vtop     *top;
+    uint64_t  cycle = 0, cpu_cycles = 0;
+    uint32_t  frame = 0;
+    int       exit_code = 0;
+    bool      started = false;            // frames are counted from the first full one after reset
+
+    std::vector<uint8_t> fb, line;
+    int       fb_w = 0, fb_h = 0;
+    bool      prev_hb = false, prev_vb = false;
+
+    FILE     *flog = nullptr, *ftrace = nullptr, *fio = nullptr;
+    bool      prev_m1 = true, prev_io_wr = false;
+
+    std::multimap<uint32_t, Ps2Event> ps2_schedule;
+    std::deque<Ps2Event> ps2_queue;
+    uint64_t  ps2_next_ok = 0;
+    bool      ps2_toggle = false;
+
+    void clock();
+    void end_frame();
+    bool tracing() const { return frame >= opt.trace_from && frame <= opt.trace_to; }
+    bool want_png(uint32_t f) const;
+    void write_png(uint32_t f);
+    void schedule_typing();
+};
+
+void Sim::clock()
+{
+    // Sample what the video pipeline sees at this rising edge: MiSTer's video_mixer latches RGB on the
+    // clk_sys edge where CE_PIXEL is high.
+    top->clk_sys = 0;
+    top->eval();
+    if (top->ce_pix) {
+        bool hb = top->VGA_HB, vb = top->VGA_VB;
+        if (!hb && !vb) {
+            line.push_back(top->VGA_R);
+            line.push_back(top->VGA_G);
+            line.push_back(top->VGA_B);
+        }
+        if (hb && !prev_hb && !line.empty()) {
+            int w = (int)line.size() / 3;
+            if (fb_h == 0) fb_w = w;
+            line.resize((size_t)fb_w * 3, 0);
+            fb.insert(fb.end(), line.begin(), line.end());
+            fb_h++;
+            line.clear();
+        }
+        prev_hb = hb;
+        if (vb && !prev_vb) end_frame();
+        prev_vb = vb;
+    }
+
+    top->clk_sys = 1;
+    top->eval();
+    cycle++;
+
+    if (top->cpu_ce) cpu_cycles++;
+    if (ftrace && tracing()) {
+        bool m1 = top->cpu_m1_n;
+        if (!m1 && prev_m1) fprintf(ftrace, "%u,%llu,%04X\n", frame, (unsigned long long)cpu_cycles, top->cpu_pc);
+        prev_m1 = m1;
+    }
+    if (fio && tracing()) {
+        bool w = top->dbg_io_wr;
+        if (w && !prev_io_wr) fprintf(fio, "%u,%04X,%02X,%02X\n", frame, top->cpu_pc, top->dbg_io_port, top->dbg_io_data);
+        prev_io_wr = w;
+    }
+
+    // hps_io style ps2_key: bit 10 toggles per event, 9 = pressed, 8 = extended. One event per ~1 ms.
+    if (!ps2_queue.empty() && cycle >= ps2_next_ok) {
+        Ps2Event e = ps2_queue.front();
+        ps2_queue.pop_front();
+        ps2_toggle = !ps2_toggle;
+        top->ps2_key = (uint16_t)((ps2_toggle << 10) | (e.press << 9) | (e.ext << 8) | e.code);
+        ps2_next_ok = cycle + (uint64_t)(CLK_HZ / 1000);
+    }
+}
+
+void Sim::end_frame()
+{
+    if (!started) { fb.clear(); fb_h = 0; line.clear(); return; }
+    uint32_t h = 2166136261u;
+    for (uint8_t b : fb) { h ^= b; h *= 16777619u; }
+    if (flog) fprintf(flog, "%u,%08x,%llu,%04X\n", frame, h, (unsigned long long)cpu_cycles, top->cpu_pc);
+    if (want_png(frame)) write_png(frame);
+    if (!opt.quiet && frame % 10 == 0)
+        fprintf(stderr, "[sim] frame %u  %.3fs emulated  %dx%d  pc %04X  hash %08x\n",
+                frame, cycle / CLK_HZ, fb_w, fb_h, top->cpu_pc, h);
+    fb.clear(); fb_h = 0; line.clear();
+    frame++;
+    auto range = ps2_schedule.equal_range(frame);
+    for (auto it = range.first; it != range.second; ++it) ps2_queue.push_back(it->second);
+}
+
+bool Sim::want_png(uint32_t f) const
+{
+    if (opt.screenshots.count(f)) return true;
+    if (opt.dump_range && f >= opt.dump_from && f <= opt.dump_to) return true;
+    if (opt.dump_every && f % opt.dump_every == 0) return true;
+    return false;
+}
+
+void Sim::write_png(uint32_t f)
+{
+    if (fb_w == 0 || fb_h == 0) return;
+    char name[1024];
+    snprintf(name, sizeof(name), "%s/frame_%06u.png", opt.out_dir.c_str(), f);
+    if (!stbi_write_png(name, fb_w, fb_h, 3, fb.data(), fb_w * 3)) {
+        fprintf(stderr, "cannot write %s\n", name);
+        exit_code = 3;
+    }
+    else if (!opt.quiet) fprintf(stderr, "[sim] wrote %s (%dx%d)\n", name, fb_w, fb_h);
+}
+
+void Sim::schedule_typing()
+{
+    for (auto &t : opt.types) {
+        uint32_t f = t.frame;
+        const std::string &s = t.text;
+        for (size_t i = 0; i < s.size(); i++) {
+            Ps2Key k;
+            bool ok = false;
+            if (s[i] == '\\' && i + 1 < s.size()) {
+                char c = s[++i];
+                ok = ps2_from_ascii(c == 'n' || c == 'r' ? '\n' : c, k);
+            } else if (s[i] == '{') {
+                size_t e = s.find('}', i);
+                std::string name = s.substr(i + 1, e - i - 1);
+                i = e;
+                if (name.rfind("WAIT", 0) == 0) { f += parse_num(name.substr(4)); continue; }
+                ok = ps2_from_name(name, k);
+                if (!ok) fprintf(stderr, "--type: unknown key {%s}\n", name.c_str());
+            } else {
+                ok = ps2_from_ascii(s[i], k);
+                if (!ok) fprintf(stderr, "--type: no key for '%c'\n", s[i]);
+            }
+            if (!ok) continue;
+            if (k.shift) ps2_schedule.insert({f, {PS2_LSHIFT, false, true}});
+            ps2_schedule.insert({f, {k.code, k.extended, true}});
+            ps2_schedule.insert({f + opt.type_press, {k.code, k.extended, false}});
+            if (k.shift) ps2_schedule.insert({f + opt.type_press, {PS2_LSHIFT, false, false}});
+            f += opt.type_press + opt.type_release;
+        }
+    }
+}
+
+int Sim::run()
+{
+    mkdir(opt.out_dir.c_str(), 0777);
+    if (!opt.frame_log.empty()) {
+        if (!(flog = fopen(opt.frame_log.c_str(), "w"))) { fprintf(stderr, "cannot write %s\n", opt.frame_log.c_str()); return 2; }
+        fprintf(flog, "frame,fb_hash,cpu_cycles,pc\n");
+    }
+    if (!opt.trace_file.empty()) {
+        if (!(ftrace = fopen(opt.trace_file.c_str(), "w"))) { fprintf(stderr, "cannot write %s\n", opt.trace_file.c_str()); return 2; }
+        fprintf(ftrace, "frame,cpu_cycle,pc\n");
+    }
+    if (!opt.io_file.empty()) {
+        if (!(fio = fopen(opt.io_file.c_str(), "w"))) { fprintf(stderr, "cannot write %s\n", opt.io_file.c_str()); return 2; }
+        fprintf(fio, "frame,pc,port,data\n");
+    }
+
+    top->reset = 1;
+    top->lines400 = opt.lines400;
+    top->ps2_key = 0;
+    for (int i = 0; i < 256; i++) clock();
+    top->reset = 0;
+    // Discard the partial picture before the first full frame.
+    while (!top->VGA_VB) clock();
+    while (top->VGA_VB) clock();
+    frame = 0; cpu_cycles = 0; fb.clear(); fb_h = 0; line.clear();
+    started = true;
+
+    schedule_typing();
+    auto range = ps2_schedule.equal_range(0);
+    for (auto it = range.first; it != range.second; ++it) ps2_queue.push_back(it->second);
+
+    while (frame <= opt.stop_frame && !Verilated::gotFinish()) clock();
+
+    if (flog) fclose(flog);
+    if (ftrace) fclose(ftrace);
+    if (fio) fclose(fio);
+    if (!opt.quiet) fprintf(stderr, "[sim] done: %u frames, %llu clk_sys cycles, %llu CPU cycles\n",
+                            frame, (unsigned long long)cycle, (unsigned long long)cpu_cycles);
+    return exit_code;
+}
+
+int main(int argc, char **argv)
+{
+    Verilated::commandArgs(argc, argv);
+    Options opt;
+    if (!parse_args(argc, argv, opt)) return 2;
+    Sim sim(opt);
+    return sim.run();
+}

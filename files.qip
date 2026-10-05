@@ -1,0 +1,22 @@
+set_global_assignment -name QIP_FILE rtl/pll.qip
+set_global_assignment -name SYSTEMVERILOG_FILE SharpMZ2500.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/mz2500.sv
+
+#============================================================
+# T80 CPU (shared with SharpMZ_MiSTer)
+#============================================================
+set_global_assignment -name VHDL_FILE rtl/T80/T80_Pack.vhd
+set_global_assignment -name VHDL_FILE rtl/T80/T80_ALU.vhd
+set_global_assignment -name VHDL_FILE rtl/T80/T80_Reg.vhd
+set_global_assignment -name VHDL_FILE rtl/T80/T80_MCode.vhd
+set_global_assignment -name VHDL_FILE rtl/T80/T80.vhd
+set_global_assignment -name VHDL_FILE rtl/T80/T80se.vhd
+
+#============================================================
+# Peripheral chips (shared with SharpMZ_MiSTer; not wired up yet)
+#============================================================
+set_global_assignment -name VHDL_FILE rtl/i8254/i8254_counter.vhd
+set_global_assignment -name VHDL_FILE rtl/i8254/i8254.vhd
+set_global_assignment -name VHDL_FILE rtl/i8255/i8255.vhd
+set_global_assignment -name VHDL_FILE rtl/z8420/Interrupt.vhd
+set_global_assignment -name VHDL_FILE rtl/z8420/z8420.vhd
