@@ -1,5 +1,6 @@
 set_global_assignment -name QIP_FILE rtl/pll.qip
 set_global_assignment -name SDC_FILE SharpMZ2500.sdc
+set_global_assignment -name SDC_FILE rtl/mz2500.sdc
 set_global_assignment -name SYSTEMVERILOG_FILE SharpMZ2500.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/mz2500.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/mz2500_video.sv
