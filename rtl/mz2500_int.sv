@@ -6,11 +6,17 @@
 //         bits 3-0 enable the sources (3 CRTC, 2 8253, 1 printer, 0 RTC).
 //   C7 W: vector for the selected source(s).
 //
-// Behaviour follows CSP interrupt.cpp: a request follows its input level on every change (so a level that
-// stays high after an acknowledge doesn't request again until it has gone low and high), the acknowledge
-// clears the request and puts the source in service, RETI clears the in-service source. Priority CRTC >
+// Behaviour follows CSP interrupt.cpp, except for how a request ends: a rising source level sets the request,
+// the acknowledge clears it and puts the source in service, RETI clears the in-service source. Priority CRTC >
 // 8253 > printer > RTC; a source in service blocks everything below it (and a pending one above it, as in
 // CSP). The block is last in the daisy chain (PIO -> SIO -> this), iei comes from the chain.
+//
+// CSP also clears a pending request when its source level falls. CSP can afford that because it checks and
+// acknowledges an interrupt atomically at an instruction boundary; a real Z80 (and the T80) commits to the
+// interrupt when it samples INT and acknowledges later, so a request withdrawn in between leaves the
+// acknowledge with no vector: the CPU reads FFh and jumps through the wrong table entry. Ys III runs the 8253
+// at 2 kHz and hits this within seconds (frame 374: OUT0 fell while interrupts were disabled after a RETI).
+// So here a request stays latched until it is acknowledged; at worst a timer tick is taken late.
 //
 // Copyright (C) 2026 Alan Steremberg. GPL-3.0-or-later (see LICENSE).
 //=======================================================================================================
@@ -61,7 +67,7 @@ always @(posedge clk) begin
 	else begin
 		src_d <= src;
 		for (int ch = 0; ch < 4; ch++)
-			if (src[ch] != src_d[ch]) req[ch] <= src[ch];
+			if (src[ch] && !src_d[ch]) req[ch] <= 1'b1;
 
 		if (wr_stb) begin
 			if (!a0) begin

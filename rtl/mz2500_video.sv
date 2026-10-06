@@ -16,7 +16,7 @@
 //     graphics byte per plane (two in the 320-dot modes), two slots ahead of the dot being shown.
 //   * 200-line output shows CSP's even buffer lines (y400 = 2 * y).
 //
-// Not done yet: 256-colour graphics (1D/9D/19/99), the 4096-colour board (AE), 64-colour text, the MZ-2000
+// Not done yet: 256-colour graphics (1D/9D/19/99), 64-colour text, the MZ-2000
 // and MZ-80B display modes (text R0F MOD), scan-line options.
 //
 // Copyright (C) 2026 Alan Steremberg. GPL-3.0-or-later (see LICENSE).
@@ -52,6 +52,7 @@ module mz2500_video
 
 	input            column80,        // Z80 PIO port A bit 5
 	input            screen_mask,     // 8255 port C bit 0 (VGATE): black screen
+	input            pal4096,         // OPN port A bit 2 = 0: output through the 4096-colour board (AE)
 
 	// Kanji ROM raster port (one clock latency)
 	output reg [17:0] kanji_addr,
@@ -79,6 +80,7 @@ reg  [7:0] cgreg_num;
 reg  [3:0] cg_mask;
 reg        font8;              // F7 bit 0: 8-line font
 reg        clear_flag;
+reg  [3:0] p4r[0:15], p4g[0:15], p4b[0:15];   // 4096-colour palette (port AE), 4 bits per component
 
 wire [8:0] GDEVS = {cgreg[9][0],  cgreg[8]};
 wire [8:0] GDEVE = {cgreg[11][0], cgreg[10]};
@@ -286,6 +288,11 @@ always @(posedge clk) begin
 		cgreg_num <= 8'h80;
 		textreg_num <= 8'd0;
 		cg_mask <= 4'hF;
+		for (int n = 0; n < 16; n++) begin
+			p4r[n] <= (n == 8) ? 4'h9 : ((n & 4'hA) == 4'hA) ? 4'hF : ((n & 4'hA) == 4'h2) ? 4'h7 : 4'h0;
+			p4g[n] <= (n == 8) ? 4'h9 : ((n & 4'hC) == 4'hC) ? 4'hF : ((n & 4'hC) == 4'h4) ? 4'h7 : 4'h0;
+			p4b[n] <= (n == 8) ? 4'h9 : ((n & 4'h9) == 4'h9) ? 4'hF : ((n & 4'h9) == 4'h1) ? 4'h7 : 4'h0;
+		end
 		font8 <= 1'b1;
 		clear_flag <= 1'b0;
 		clr_active <= 1'b0;
@@ -338,6 +345,9 @@ always @(posedge clk) begin
 				end
 				8'hF6: cg_mask <= {io_din[0], io_din[2:0]};
 				8'hF7: font8 <= io_din[0];
+				// 16-bit port: A12-A9 = palette number, A8 = 1 for G (D3-0), 0 for R (D7-4) and B (D3-0)
+				8'hAE: if (io_hi[0]) p4g[io_hi[4:1]] <= io_din[3:0];
+				       else begin p4r[io_hi[4:1]] <= io_din[7:4]; p4b[io_hi[4:1]] <= io_din[3:0]; end
 				default: ;
 			endcase
 		end
@@ -361,7 +371,11 @@ reg  [8:0] v;
 always @(posedge clk) begin
 	ce_pix <= 1'b0;
 	if (reset) dot_div <= 3'd0;
+`ifdef MZ_FAST_SIM
+	else if (dot_div == (lines400 ? 3'd1 : 3'd2)) begin
+`else
 	else if (dot_div == (lines400 ? 3'd3 : 3'd5)) begin
+`endif
 		dot_div <= 3'd0;
 		ce_pix  <= 1'b1;
 	end
@@ -478,7 +492,11 @@ reg         blink;
 reg  [25:0] blink_cnt;
 always @(posedge clk) begin
 	if (reset) begin blink <= 1'b0; blink_cnt <= 26'd0; end
+`ifdef MZ_FAST_SIM
+	else if (blink_cnt == 26'd21477272) begin blink_cnt <= 26'd0; blink <= ~blink; end   // 500 ms
+`else
 	else if (blink_cnt == 26'd42954544) begin blink_cnt <= 26'd0; blink <= ~blink; end   // 500 ms
+`endif
 	else blink_cnt <= blink_cnt + 26'd1;
 end
 
@@ -661,19 +679,43 @@ endfunction
 
 wire [3:0] back16 = {textreg[11][0], textreg[12][0], textreg[11][5], textreg[11][2]};
 wire [3:0] pg     = palreg[gval][3:0];
-wire [23:0] gcolor = pal16((pg != 4'd0) ? (pg & cg_mask) : (back16 & cg_mask));
+wire [23:0] gcolor16 = pal16((pg != 4'd0) ? (pg & cg_mask) : (back16 & cg_mask));
+
+// 4096-colour board (CSP palette4096tmp): every colour goes through a palette register, text colour t (1-7)
+// through register t + 8 and non-transparent black through register 0; components are 4 bits (<< 4).
+function [3:0] gmap(input [3:0] c);
+	gmap = (palreg[c][3:0] != 4'd0) ? (palreg[c][3:0] & cg_mask) : (back16 & cg_mask);
+endfunction
+function [23:0] c4096(input [3:0] i);
+	c4096 = {p4r[i], 4'h0, p4g[i], 4'h0, p4b[i], 4'h0};
+endfunction
+wire [23:0] gcolor = pal4096 ? c4096(gmap(gval)) : gcolor16;
+wire [23:0] tcolor = pal4096 ? c4096(gmap({1'b1, tval[2:0]})) : digital(tval[2:0]);
+wire [23:0] bcolor = pal4096 ? c4096(palreg[back16][3:0]) : pal16(palreg[back16][3:0]);
+wire [23:0] kcolor = pal4096 ? c4096(gmap(4'd0)) : 24'd0;     // non-transparent black inside the window
+
+// Simulation only: +notext / +nogfx on the Vtop command line hide a layer (debugging).
+reg dbg_notext = 1'b0, dbg_nogfx = 1'b0;
+`ifdef VERILATOR
+initial begin
+	dbg_notext = $test$plusargs("notext");
+	dbg_nogfx  = $test$plusargs("nogfx");
+end
+`endif
 
 reg [23:0] rgb;
 always @(*) begin
-	if (g_in) begin
+	if (dbg_notext) rgb = g_in ? gcolor : bcolor;
+	else if (dbg_nogfx) rgb = (tval == 4'd0 || tval == 4'd8) ? 24'd0 : digital(tval[2:0]);
+	else if (g_in) begin
 		if (tval == 4'd0 || palreg[gval][4]) rgb = gcolor;
-		else if (tval == 4'd8)               rgb = 24'd0;
-		else                                 rgb = digital(tval[2:0]);
+		else if (tval == 4'd8)               rgb = kcolor;
+		else                                 rgb = tcolor;
 	end
 	else begin
-		if (tval == 4'd0)      rgb = pal16(palreg[back16][3:0]);
+		if (tval == 4'd0)      rgb = bcolor;
 		else if (tval == 4'd8) rgb = 24'd0;
-		else                   rgb = digital(tval[2:0]);
+		else                   rgb = tcolor;
 	end
 	if (screen_mask) rgb = 24'd0;
 end

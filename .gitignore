@@ -53,3 +53,6 @@ verilator/out/
 verilator/software/
 out/
 tools/__pycache__/
+
+# Simulation save states (--save-state), tied to one build
+verilator/states/

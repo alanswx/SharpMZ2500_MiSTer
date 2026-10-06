@@ -36,6 +36,13 @@ Requires `verilator` 5.x, `ghdl` 5.x with `synth` (Homebrew's `ghdl` has it) and
   --trace-cpu FILE       PC at each M1; --trace-io FILE: each I/O write; --trace-from/--trace-to N
   --rom FILE             boot.rom (IPL at 0, kanji at 10000h); or --ipl FILE --kanji FILE
                          (default ../software/roms/extracted/IPL/IPL.ROM and KANJI/KANJI.ROM)
+  --fdd FILE             D88 image in drive 1; --fdd-b FILE: drive 2; --fdd-readonly: never write back
+  --wav FILE             record the audio output (48 kHz, 16-bit stereo)
+  --save-state N:FILE    save the whole machine at the start of frame N; --load-state FILE resumes there
+                         (same binary and same --fdd images; frame numbers continue)
+  --dump-at-cpu-cycle N  write main RAM to out/ram_dump.hex and print the MMU pages (debugging)
+  +notext / +nogfx       hide the text or graphics layer; +inttrace: log interrupt acknowledges and RETIs
+                         (plusargs are not part of a saved state: they don't apply after --load-state)
 ```
 
 Frames are counted from the first full frame after reset and end when vertical blanking starts. A PNG is the active
@@ -43,6 +50,13 @@ picture as the core outputs it: 640x400 in 400-line mode, 640x200 in 200-line mo
 
 The ROMs go in through the same ioctl download port the MiSTer uses (one byte per 4 clocks, machine in reset), so
 frame 0 starts after that.
+
+`make fast` builds `obj_dir_fast/Vtop` with clk_sys at half rate (MZ_FAST_SIM: dot divider /2 and /3, the CPU,
+8253, OPN enables and the SDRAM model latencies keep their real time). It is about 1.5x faster; frame timing is close
+but not identical (the IPL screen appears at frame 386 instead of 381), so the regression tests use the normal build.
+
+The sim has a behavioural SDRAM model (`sdram_model.sv`) with the same request/ready handshake and latency as
+`rtl/sdram.sv`, and plays hps_io's sd_* block interface for the floppy slots, 512-byte blocks from the image files.
 
 Speed: about 2.3 frames per second (3.8 M clk_sys cycles per second of CPU) on an M4 Max: 400 frames, the IPL's first
 screen, take 3 minutes. A `make fast` build at a reduced clk_sys, as SharpMZ has, or Verilator threads are options.

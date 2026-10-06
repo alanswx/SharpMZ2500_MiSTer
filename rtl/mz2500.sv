@@ -9,12 +9,12 @@
 //     I/O waits (FDC, PIO, OPN, RTC) and the display-period WAIT for text VRAM / PCG and GVRAM.
 //   * MMU: eight 8 KB windows, page registers B4/B5, IPL reset map (34-37, 04-07) and the "special" reset
 //     (8255 PC1 rising: map 00-07 and CPU reset), IPL reset when 8255 PC3 stays low for 100 us.
-//   * Memory: 128 KB main RAM, IPL ROM 32 KB and kanji ROM 256 KB in block RAM, loaded through ioctl
-//     (boot.rom layout of docs/roms.md: IPL at 000000, kanji at 010000).
+//   * Memory: 256 KB main RAM and the 32 KB IPL ROM in SDRAM, kanji ROM 256 KB in block RAM, ROMs loaded
+//     through ioctl (boot.rom layout of docs/roms.md: IPL at 000000, kanji at 010000).
 //   * Devices: video (mz2500_video: text CRTC, graphics controller, VRAMs), interrupt block (C6/C7), 8253
 //     (E4-E7, gate pulses F0-F3), 8255 (E0-E3), Z80 PIO port A/B for the keyboard (E8-EB), keyboard matrix,
-//     YM2203 register stub (C8/C9: SSG registers and port B switches; no sound yet), MB8876 stub that
-//     reports "not ready" (no floppy yet), joystick port (EF, nothing pressed).
+//     YM2203 register stub (C8/C9: SSG registers and port B switches; no sound yet), floppy (mz2500_fdc:
+//     MB8876 + two D88 drives on image slots), joystick port (EF, nothing pressed).
 //
 // Unmapped ports and pages read FFh.
 //
@@ -33,6 +33,29 @@ module mz2500
 	input         ioctl_wr,
 	input  [24:0] ioctl_addr,
 	input   [7:0] ioctl_dout,
+	output        ioctl_wait,
+
+	// SDRAM client (rtl/sdram.sv in 8-bit mode): main RAM and IPL ROM
+	output reg        ram_rd,
+	output reg        ram_we,
+	output reg [24:0] ram_addr,
+	output reg  [7:0] ram_din,
+	input       [7:0] ram_dout,
+	input             ram_ready,
+
+	// Floppy image slots (hps_io sd_* bus), drives 1 and 2
+	input       [1:0] img_mounted,
+	input             img_readonly,
+	input      [63:0] img_size,
+	output     [31:0] sd_lba[2],
+	output      [1:0] sd_rd,
+	output      [1:0] sd_wr,
+	input       [1:0] sd_ack,
+	input       [8:0] sd_buff_addr,
+	input       [7:0] sd_buff_dout,
+	output      [7:0] sd_buff_din[2],
+	input             sd_buff_wr,
+	output            fdd_busy,
 
 	// Video, one pixel per ce_pix.
 	output        ce_pix,
@@ -57,8 +80,6 @@ module mz2500
 	output reg [7:0] dbg_io_data
 );
 
-assign audio_l = 16'd0;
-assign audio_r = 16'd0;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Resets
@@ -73,9 +94,16 @@ wire cpu_reset = sys_reset | (cpu_rst_cnt != 4'd0);
 // Clock enables
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+// MZ_FAST_SIM (verilator 'make fast'): clk_sys at half rate, 42.95 MHz, for faster simulation. Every rate below
+// is derived from CLK_SYS_HZ; the video module halves its dot divider.
+`ifdef MZ_FAST_SIM
+localparam integer CLK_SYS_HZ = 42954545;
+`else
 localparam integer CLK_SYS_HZ = 85909091;
+`endif
 localparam integer CPU_HZ     = 6000000;
 localparam integer PIT_HZ     = 31250;
+localparam integer OPN_HZ     = 2000000;
 
 // CPU 6 MHz: fractional accumulator (the 24 MHz and 21.477 MHz crystals are not related).
 reg [27:0] cpu_acc;
@@ -104,6 +132,19 @@ always @(posedge clk_sys) begin
 	else pit_acc <= pit_acc + PIT_HZ;
 end
 
+// YM2203 master clock: 2 MHz (24 MHz / 12)
+reg [27:0] opn_acc;
+reg        ce_opn;
+always @(posedge clk_sys) begin
+	ce_opn <= 1'b0;
+	if (reset) opn_acc <= 28'd0;
+	else if (opn_acc >= CLK_SYS_HZ - OPN_HZ) begin
+		opn_acc <= opn_acc - (CLK_SYS_HZ - OPN_HZ);
+		ce_opn  <= 1'b1;
+	end
+	else opn_acc <= opn_acc + OPN_HZ;
+end
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // CPU
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -115,17 +156,18 @@ reg   [7:0] cpu_din;
 wire        int_n;
 wire        wait_n;
 
-// The sim gets T80se as a ghdl synth netlist with these generics already fixed (verilator/Makefile, -g...):
-// keep both in step.
+// T80 v350 (rtl/T80_v350, Sorgelig's MiSTer version). The sim gets T80s as a ghdl synth netlist with these
+// generics already fixed (verilator/Makefile, -g...): keep both in step.
 `ifdef VERILATOR
-T80se cpu
+T80s cpu
 `else
-T80se #(.Mode(0), .T2Write(1), .IOWait(1)) cpu
+T80s #(.Mode(0), .T2Write(1), .IOWait(1)) cpu
 `endif
 (
 	.RESET_n(~cpu_reset),
-	.CLK_n(clk_sys),
-	.CLKEN(ce_cpu),
+	.CLK(clk_sys),
+	.CEN(ce_cpu),
+	.OUT0(1'b0),
 	.WAIT_n(wait_n),
 	.INT_n(int_n),
 	.NMI_n(1'b1),
@@ -170,6 +212,9 @@ wire inta_end   = inta_d & ~inta;
 
 wire [7:0] port = cpu_a[7:0];
 
+wire [7:0] opn_dout, opn_pa;   // YM2203 (below): data out, port A output
+wire       opn_pa_oe;
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // MMU (B4, B5, B7)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -190,27 +235,56 @@ wire [12:0] cur_off  = cpu_a[12:0];
 wire ld_ipl   = ioctl_download && ioctl_addr[24:15] == 10'd0;
 wire ld_kanji = ioctl_download && ioctl_addr[24:16] >= 9'd1 && ioctl_addr[24:16] <= 9'd4;
 
-// Main RAM 128 KB (pages 00-0F)
-wire [7:0] ram_dout;
-spram #(.AW(17), .DW(8)) main_ram
-(
-	.clk(clk_sys),
-	.addr({cur_page[3:0], cur_off}),
-	.we(mem_wr_end && cur_page[5:4] == 2'b00),
-	.din(cpu_dout),
-	.dout(ram_dout)
-);
+// Main RAM 256 KB (pages 00-1F) and the IPL ROM (pages 34-37) are in SDRAM: byte address 000000-03FFFF for the
+// RAM, 040000-047FFF for the IPL. The controller (rtl/sdram.sv) takes a request on a rising edge of rd or we and
+// drops 'ready' until it is done. CPU reads are issued at the start of the memory cycle and the CPU waits only if
+// the data isn't back by T2 (at 6 MHz it normally is: T1 to T2 is 14 clk_sys); writes are posted at the end of
+// the cycle. The IPL is written here during the ROM download (ioctl_wait holds hps_io).
+wire        ram_page     = !cur_page[5] || cur_page[5:2] == 4'b1101;
+wire [24:0] cpu_ram_addr = cur_page[5] ? {6'd0, 1'b1, 3'b000, cur_page[1:0], cur_off} : {7'd0, cur_page[4:0], cur_off};
 
-// IPL ROM 32 KB (pages 34-37)
-wire [7:0] ipl_dout;
-spram #(.AW(15), .DW(8)) ipl_rom
-(
-	.clk(clk_sys),
-	.addr(ioctl_download ? ioctl_addr[14:0] : {cur_page[1:0], cur_off}),
-	.we(ld_ipl & ioctl_wr),
-	.din(ioctl_dout),
-	.dout(ipl_dout)
-);
+localparam RAM_IDLE = 2'd0, RAM_RD = 2'd1, RAM_WR = 2'd2;
+reg  [1:0] ram_st;
+reg  [1:0] ram_cnt;
+reg        ram_wpend;
+reg [24:0] ram_waddr;
+reg  [7:0] ram_wdata;
+reg        ram_rdone;
+reg  [7:0] ram_q;
+
+always @(posedge clk_sys) begin
+	if (cyc_start) ram_rdone <= 1'b0;
+	case (ram_st)
+		RAM_IDLE:
+			if (ram_wpend) begin
+				ram_we <= 1'b1; ram_addr <= ram_waddr; ram_din <= ram_wdata;
+				ram_wpend <= 1'b0; ram_cnt <= 2'd3; ram_st <= RAM_WR;
+			end
+			else if (mem_rd && ram_page && !ram_rdone && !cpu_reset) begin
+				ram_rd <= 1'b1; ram_addr <= cpu_ram_addr; ram_cnt <= 2'd3; ram_st <= RAM_RD;
+			end
+		RAM_RD:
+			if (ram_cnt != 2'd0) ram_cnt <= ram_cnt - 2'd1;
+			else if (ram_ready) begin ram_q <= ram_dout; ram_rdone <= 1'b1; ram_rd <= 1'b0; ram_st <= RAM_IDLE; end
+		RAM_WR:
+			if (ram_cnt != 2'd0) ram_cnt <= ram_cnt - 2'd1;
+			else if (ram_ready) begin ram_we <= 1'b0; ram_st <= RAM_IDLE; end
+		default: ram_st <= RAM_IDLE;
+	endcase
+	// new writes (after the state machine so they win over the clear above)
+	if (mem_wr_end && !cur_page[5]) begin
+		ram_wpend <= 1'b1; ram_waddr <= cpu_ram_addr; ram_wdata <= cpu_dout;
+	end
+	if (ld_ipl && ioctl_wr) begin
+		ram_wpend <= 1'b1; ram_waddr <= 25'h40000 | {10'd0, ioctl_addr[14:0]}; ram_wdata <= ioctl_dout;
+	end
+	if (reset) begin
+		ram_st <= RAM_IDLE; ram_rd <= 1'b0; ram_we <= 1'b0; ram_wpend <= 1'b0; ram_rdone <= 1'b0;
+	end
+end
+
+assign ioctl_wait = ram_wpend || ram_st != RAM_IDLE;
+wire   ram_wait    = mem_rd && ram_page && !ram_rdone;
 
 // Kanji ROM 256 KB: CPU window (page 39 with CF bit 7) on port A, text raster on port B
 wire [17:0] kanji_raddr;
@@ -264,6 +338,7 @@ mz2500_video video
 
 	.column80(pio_pa[5]),
 	.screen_mask(ppi_pc[0]),
+	.pal4096(~opn_pa[2]),
 
 	.kanji_addr(kanji_raddr),
 	.kanji_data(kanji_rdata),
@@ -312,7 +387,7 @@ always @(posedge clk_sys) begin
 	end
 end
 
-assign wait_n = (wait_cnt == 3'd0) && !wait_t && !wait_g && !(gv_busy && pg_gv && (mem_rd | mem_wr));
+assign wait_n = (wait_cnt == 3'd0) && !wait_t && !wait_g && !(gv_busy && pg_gv && (mem_rd | mem_wr)) && !ram_wait;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Interrupts: interrupt block (C6/C7), RETI detection
@@ -407,7 +482,7 @@ always @(posedge clk_sys) begin
 		// NST (PC1) 0 -> 1: special reset
 		if (!ppi_pc[1] && ppi_pc_new[1]) cpu_rst_cnt <= 4'd15;
 		// BST (PC3) 1 -> 0 starts the IPL reset timer, 0 -> 1 cancels it (CSP cmt.cpp, 100 us)
-		if (ppi_pc[3] && !ppi_pc_new[3]) bst_cnt <= 14'd8591;
+		if (ppi_pc[3] && !ppi_pc_new[3]) bst_cnt <= CLK_SYS_HZ / 10000;   // 100 us
 		else if (ppi_pc_new[3]) bst_cnt <= 14'd0;
 		else if (bst_cnt == 14'd1) begin bst_cnt <= 14'd0; ipl_reset <= 1'b1; end
 		else if (bst_cnt != 14'd0) bst_cnt <= bst_cnt - 14'd1;
@@ -419,10 +494,6 @@ end
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 reg  [7:0] pio_ctl_a, pio_ctl_b;
-reg  [7:0] opn_addr;
-reg  [7:0] opn_reg[0:15];
-reg  [7:0] fdc_track, fdc_sector, fdc_data;
-reg  [7:0] fdc_drive, fdc_side, fdc_dens;
 
 wire [7:0] opn_port_b = {1'b0, ~lines400, 1'b1, 1'b1, 1'b0, 3'b111};   // CSP 37h (+40h for 200 lines)
 
@@ -433,10 +504,6 @@ always @(posedge clk_sys) begin
 		bank <= 3'd0; mmu_mode <= 2'd0;
 		kanji_bank <= 8'd0; dic_bank <= 5'd0;
 		pio_pa <= 8'h00; pio_ctl_a <= 8'd0; pio_ctl_b <= 8'd0;
-		opn_addr <= 8'd0;
-		for (int n = 0; n < 16; n++) opn_reg[n] <= 8'd0;
-		fdc_track <= 8'd0; fdc_sector <= 8'd1; fdc_data <= 8'd0;
-		fdc_drive <= 8'd0; fdc_side <= 8'd0; fdc_dens <= 8'd0;
 	end
 	else begin
 		// special reset: map 00-07
@@ -457,16 +524,8 @@ always @(posedge clk_sys) begin
 					end
 					mmu_mode <= cpu_dout[1:0];
 				end
-				8'hC8: opn_addr <= cpu_dout;
-				8'hC9: if (opn_addr < 8'h10) opn_reg[opn_addr[3:0]] <= cpu_dout;
 				8'hCE: dic_bank <= cpu_dout[4:0];
 				8'hCF: kanji_bank <= cpu_dout;
-				8'hD9: fdc_track <= ~cpu_dout;
-				8'hDA: fdc_sector <= ~cpu_dout;
-				8'hDB: fdc_data <= ~cpu_dout;
-				8'hDC: fdc_drive <= cpu_dout;
-				8'hDD: fdc_side <= cpu_dout;
-				8'hDE: fdc_dens <= cpu_dout;
 				8'hE8: pio_pa <= cpu_dout;
 				8'hE9: pio_ctl_a <= cpu_dout;
 				8'hEB: pio_ctl_b <= cpu_dout;
@@ -475,6 +534,74 @@ always @(posedge clk_sys) begin
 		end
 	end
 end
+
+wire [7:0] fdc_din;
+mz2500_fdc fdc
+(
+	.clk_sys(clk_sys),
+	.reset(sys_reset),
+	.ce_cpu(ce_cpu),
+	.io_addr(port),
+	.io_rd(io_rd),
+	.io_wr(io_wr),
+	.io_dout(cpu_dout),
+	.io_din(fdc_din),
+	.drsel(opn_pa[1]),
+	.img_mounted(img_mounted),
+	.img_readonly(img_readonly),
+	.img_size(img_size),
+	.sd_lba(sd_lba),
+	.sd_rd(sd_rd),
+	.sd_wr(sd_wr),
+	.sd_ack(sd_ack),
+	.sd_buff_addr(sd_buff_addr),
+	.sd_buff_dout(sd_buff_dout),
+	.sd_buff_din(sd_buff_din),
+	.sd_buff_wr(sd_buff_wr),
+	.busy(fdd_busy)
+);
+
+// YM2203 (jotego jt03) at C8 (address / status) and C9 (data). Port A (output): bit 1 DRSEL swaps the floppy
+// units, bit 2 PLT selects the 4096-colour board, bit 3 the mouse. Port B (input): the front-panel switches.
+// The OPN's IRQ is not connected on the MZ-2500 (software polls the timer flags in the status register).
+// jt12 needs a reset of at least 6 cen cycles and must not be written during it: stretch the machine reset.
+reg  [9:0] opn_rst_cnt;
+always @(posedge clk_sys) begin
+	if (sys_reset) opn_rst_cnt <= 10'd1023;
+	else if (opn_rst_cnt != 10'd0) opn_rst_cnt <= opn_rst_cnt - 10'd1;
+end
+wire        opn_rst = sys_reset || opn_rst_cnt != 10'd0;
+wire signed [15:0] opn_snd;
+
+jt03 opn
+(
+	.rst(opn_rst),
+	.clk(clk_sys),
+	.cen(ce_opn),
+	.din(cpu_dout),
+	.addr(port[0]),
+	.cs_n(~(io_wr_end && port[7:1] == 7'b1100100 && !opn_rst)),
+	.wr_n(1'b0),
+	.dout(opn_dout),
+	.irq_n(),
+	.IOA_in(opn_pa_oe ? opn_pa : 8'hFF),   // an output port reads back its own pins (IPL does read-modify-write)
+	.IOB_in(opn_port_b),
+	.IOA_out(opn_pa),
+	.IOB_out(),
+	.IOA_oe(opn_pa_oe),
+	.IOB_oe(),
+	.psg_A(), .psg_B(), .psg_C(),
+	.fm_snd(),
+	.psg_snd(),
+	.snd(opn_snd),
+	.snd_sample(),
+	.debug_view()
+);
+
+// Mix: OPN plus the 1-bit beeper (8255 PC2).
+wire signed [15:0] beep = ppi_pc[2] ? 16'sd4096 : 16'sd0;
+assign audio_l = opn_snd + beep;
+assign audio_r = opn_snd + beep;
 
 mz2500_kbd kbd
 (
@@ -494,9 +621,8 @@ reg [7:0] mem_dout, io_dout;
 always @(*) begin
 	mem_dout = 8'hFF;
 	casez (cur_page)
-		6'b00????: mem_dout = ram_dout;
+		6'b0?????, 6'b1101??: mem_dout = ram_q;
 		6'b10????, 6'b1100??, 6'h38: mem_dout = vid_mem_dout;
-		6'b1101??: mem_dout = ipl_dout;
 		6'h39: mem_dout = (kanji_bank[7] && cur_off[12:11] == 2'd0) ? kanji_cdata : vid_mem_dout;
 		default: mem_dout = 8'hFF;
 	endcase
@@ -508,13 +634,8 @@ always @(*) begin
 		8'hB4: io_dout = {5'd0, bank};
 		8'hB5: io_dout = {2'd0, page[bank]};
 		8'hBC, 8'hBD, 8'hBE, 8'hBF, 8'hF4, 8'hF5, 8'hF6, 8'hF7: io_dout = vid_io_dout;
-		8'hC8: io_dout = 8'h00;                                  // OPN status: not busy
-		8'hC9: io_dout = (opn_addr == 8'h0F) ? opn_port_b :
-		                 (opn_addr < 8'h10) ? opn_reg[opn_addr[3:0]] : 8'hFF;
-		8'hD8: io_dout = ~8'h80;                                 // MB8876 status: not ready (no floppy)
-		8'hD9: io_dout = ~fdc_track;
-		8'hDA: io_dout = ~fdc_sector;
-		8'hDB: io_dout = ~fdc_data;
+		8'hC8, 8'hC9: io_dout = opn_dout;
+		8'hD8, 8'hD9, 8'hDA, 8'hDB: io_dout = fdc_din;
 		8'hE0: io_dout = ppi_pa;
 		8'hE1: io_dout = ppi_pb;
 		8'hE2: io_dout = ppi_pc;

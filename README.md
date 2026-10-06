@@ -7,18 +7,21 @@ kanji ROM, and an MZ-80B / MZ-2000 compatible mode.
 Sister project of [SharpMZ_MiSTer](https://github.com/alanswx/SharpMZ_MiSTer) (MZ-80K to MZ-2000), with which it
 shares the T80, 8255, 8253, Z80 PIO, floppy and tape RTL.
 
-## Status: the real IPL boots to its first screen (simulation)
+## Status: Ys III boots from floppy and plays its intro (simulation)
 
-With the real IPL and kanji ROMs, the Verilator simulation powers on, runs the IPL (it copies itself to RAM and
-restarts there through the 8255 "special reset"), probes the floppy and tape, and shows its "loading error / Press F
-or C" screen. The 400-line picture is identical pixel for pixel to BubiZ-2500's (CSP core) and the 200-line one to
-MAME's, and it appears at frame 381 (BubiZ: about 372).
+In the Verilator simulation, with the real IPL and kanji ROMs:
 
-What exists (`rtl/`): Z80 with CSP's wait states, the MMU and its reset maps, main RAM / IPL / kanji ROM in block RAM
-loaded from `boot.rom`, the text CRTC and graphics controller with text VRAM, PCG and graphics VRAM (16-colour modes,
-RMW window, clear, scroll, palette and priority), the interrupt block, 8253, 8255, Z80 PIO and the keyboard matrix,
-and stubs for the OPN registers and the floppy controller. No floppy, tape, sound, RTC, mouse, 256/4096-colour
-graphics or MZ-80B/2000 modes yet: see [TODO.md](TODO.md).
+- Power on with no media: the IPL's "loading error / Press F or C" screen, identical pixel for pixel to BubiZ-2500's
+  (CSP core) at 400 lines and to MAME's at 200 lines (`make test`).
+- **Ys III (Falcom, 1989)** from its two D88 disks: the IPL boots it, it loads, shows the Falcom copyright screen,
+  fades it out through the 4096-colour palette and plays the scrolling intro with its YM2203 music driver.
+
+What exists (`rtl/`): Z80 (T80 v350) with CSP's wait states; the MMU and its reset maps; 256 KB main RAM and the IPL
+in SDRAM, kanji ROM in block RAM, ROMs from `boot.rom`; text CRTC and graphics controller with text VRAM, PCG and
+graphics VRAM (16-colour modes, RMW window, clear, scroll, palette and priority, the 4096-colour board); the interrupt
+block, 8253, 8255, Z80 PIO and keyboard; the MB8876 floppy controller with two D88 drives (wd1793.sv); the YM2203
+(jotego jt03) and the beeper. Not yet: 256-colour graphics, tape, RTC, mouse, SIO, the MZ-80B/2000 modes, a hardware
+build that fits (block RAM, see TODO.md): see [TODO.md](TODO.md).
 
 ROMs: build `boot.rom` from your dumps with `tools/make_bootrom.sh IPL.ROM KANJI.ROM boot.rom` (CRCs in
 docs/roms.md) and put it in `games/SharpMZ2500/` on the SD card; the sim reads `software/roms/extracted/` by default
@@ -28,7 +31,7 @@ Research: hardware reference, ROM list, software sources and reference emulators
 emulator is BubiZ-2500 (Takeda's EmuZ-2500 core with a headless mode), with MAME as a second opinion; both run
 headless on macOS (docs/emulators.md).
 
-Next: the floppy controller (phase 6 in [TODO.md](TODO.md)) to boot disks, then sound.
+Next: fit the FPGA (kanji ROM to SDRAM), more titles from the MAME list, 256-colour modes, RTC.
 
 ## Layout
 
@@ -40,7 +43,10 @@ Next: the floppy controller (phase 6 in [TODO.md](TODO.md)) to boot disks, then 
 | `rtl/mz2500.sv` | The machine (shared by the core and the simulation): CPU, waits, MMU, memories, I/O decode, small devices |
 | `rtl/mz2500_video.sv` | Raster, text CRTC, graphics controller, VRAMs, mixer |
 | `rtl/mz2500_int.sv`, `rtl/mz_pit8253.sv`, `rtl/mz2500_kbd.sv`, `rtl/dpram.sv` | Interrupt block, 8253, keyboard matrix, block RAMs |
-| `rtl/T80` | Z80 (VHDL, shared with SharpMZ_MiSTer). `rtl/i8255`, `rtl/i8254`, `rtl/z8420` are copied but not used (SV versions are simpler to drive from bus strobes) |
+| `rtl/T80_v350` | Z80: Sorgelig's MiSTer T80 v350 (`entity work.` added to its instances for GHDL). `rtl/T80` (v303), `rtl/i8255`, `rtl/i8254`, `rtl/z8420` are the SharpMZ copies, not used |
+| `rtl/mz2500_fdc.sv`, `rtl/wd1793.sv`, `rtl/wd1793_mem.v` | Floppy: MB8876 wrapper, Sorgelig's WD1793 with FM-7_MiSTer's D77/D88 support (from SharpMZ_MiSTer) |
+| `rtl/jt12/` | jotego jt12/jt49 (YM2203 = jt03), from FM-7_MiSTer, GPL-3 |
+| `rtl/sdram.sv` | Sorgelig's SDRAM controller (from FM-7_MiSTer), refresh set for 85.9 MHz |
 | `rtl/pll*` | 50 MHz to 85.909091 MHz |
 | `sys/` | Template_MiSTer framework (do not edit) |
 | `verilator/` | Headless simulation, regression tests ([README](verilator/README.md)) |

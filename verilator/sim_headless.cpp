@@ -18,16 +18,23 @@
 #include <set>
 #include <map>
 #include <deque>
+#include <cstring>
+#include <algorithm>
 #include <sys/stat.h>
 
 #include "Vtop.h"
 #include "verilated.h"
+#include "verilated_save.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 #include "ps2_keys.h"
 
+#ifdef MZ_FAST_SIM
+static const double CLK_HZ = 42954545.0;   // clk_sys at half rate ('make fast')
+#else
 static const double CLK_HZ = 85909091.0;   // clk_sys (24 x 3.579545 MHz)
+#endif
 
 struct TypeCmd { uint32_t frame; std::string text; };
 
@@ -48,6 +55,13 @@ struct Options {
     uint32_t    trace_from = 0, trace_to = 0xFFFFFFFF;
     std::string rom_file;                 // --rom: boot.rom image (IPL at 0, kanji at 0x10000)
     std::string ipl_file, kanji_file;     // --ipl / --kanji: separate ROM files
+    std::string fdd[2];                   // --fdd / --fdd-b: D88 images in drives 1 and 2
+    bool        fdd_readonly = false;     // --fdd-readonly: never write back to the image files
+    std::string wav_file;                 // --wav: audio output, 48 kHz 16-bit stereo
+    uint32_t    save_frame = 0;           // --save-state FRAME:FILE
+    std::string save_file;
+    std::string load_file;                // --load-state FILE
+    uint64_t    dump_cycle = 0;           // --dump-at-cpu-cycle N: RAM dump + MMU pages (sim.v)
 };
 
 static void usage()
@@ -68,6 +82,11 @@ static void usage()
 "  --trace-io FILE        each I/O write: frame,pc,port,data\n"
 "  --trace-from N         start tracing at frame N; --trace-to N stops after frame N\n"
 "  --rom FILE             boot.rom image: IPL at 000000, kanji ROM at 010000 (tools/make_bootrom.sh)\n"
+"  --fdd FILE             D88 image in drive 1; --fdd-b FILE: drive 2; --fdd-readonly: don't write to them\n"
+"  --save-state N:FILE    save the machine state at the start of frame N; --load-state FILE resumes from it\n"
+"                         (give the same --fdd/--fdd-b images; frame numbers continue)\n"
+"  --dump-at-cpu-cycle N  write main RAM (SDRAM model) to out/ram_dump.hex and print the MMU pages at CPU cycle N\n"
+"  --wav FILE             record the audio output (48 kHz, 16-bit stereo WAV)\n"
 "  --ipl FILE, --kanji FILE   load IPL.ROM / KANJI.ROM separately (default: ../software/roms/extracted/...)\n"
 "fb_hash is FNV-1a 32 over the RGB888 bytes of the active picture.\n");
 }
@@ -114,8 +133,21 @@ static bool parse_args(int argc, char **argv, Options &o)
         else if (a == "--trace-from") o.trace_from = parse_num(next());
         else if (a == "--trace-to") o.trace_to = parse_num(next());
         else if (a == "--rom") o.rom_file = next();
+        else if (a == "--fdd") o.fdd[0] = next();
+        else if (a == "--fdd-b") o.fdd[1] = next();
+        else if (a == "--fdd-readonly") o.fdd_readonly = true;
+        else if (a == "--wav") o.wav_file = next();
+        else if (a == "--save-state") {
+            std::string v = next();
+            size_t c = v.find(':');
+            if (c == std::string::npos) { fprintf(stderr, "--save-state wants FRAME:FILE\n"); return false; }
+            o.save_frame = parse_num(v.substr(0, c)); o.save_file = v.substr(c + 1);
+        }
+        else if (a == "--load-state") o.load_file = next();
+        else if (a == "--dump-at-cpu-cycle") o.dump_cycle = std::stoull(next(), nullptr, 0);
         else if (a == "--ipl") o.ipl_file = next();
         else if (a == "--kanji") o.kanji_file = next();
+        else if (a[0] == '+') {}   // Verilator plusargs (+notext, +nogfx)
         else { fprintf(stderr, "unknown option %s (try --help)\n", a.c_str()); return false; }
     }
     return true;
@@ -156,8 +188,171 @@ private:
     void write_png(uint32_t f);
     void schedule_typing();
     bool load_roms();
+
+    // hps_io sd_* block interface for the floppy slots: 512-byte blocks, one byte per clock
+    FILE     *fdd[2] = {nullptr, nullptr};
+    uint64_t  fdd_size[2] = {0, 0};
+    enum { SD_IDLE, SD_READ, SD_READ_END, SD_WRITE } sd_state = SD_IDLE;
+    int       sd_slot = 0, sd_idx = 0;
+    uint32_t  sd_lba = 0;
+    uint8_t   sd_data[512];
+    void      sd_step();
+    bool      mount_fdd(int k);
+
+    FILE     *fwav = nullptr;
+    uint32_t  wav_samples = 0;
+    double    wav_next = 0;
+    void      wav_close();
+
+    // Harness state saved next to the model (--save-state / --load-state)
+    struct HState {
+        uint64_t cycle, cpu_cycles, ps2_next_ok;
+        uint32_t frame;
+        uint8_t  prev_hb, prev_vb, prev_m1, prev_io_wr, ps2_toggle;
+        int32_t  fb_w;
+        uint64_t fdd_size[2];
+    };
+    void      save_state();
+    bool      load_state();
+    bool      open_fdd(int k);
+    bool      opt_save_pending = false;
+    bool      dump_done = false;
+    int       finish();
     void ioctl_load(uint32_t base, const std::vector<uint8_t> &data);
 };
+
+void Sim::sd_step()
+{
+    auto req_rd = [&](int k) -> bool { return (top->fdd_rd >> k) & 1; };
+    auto req_wr = [&](int k) -> bool { return (top->fdd_wr >> k) & 1; };
+    auto ack    = [&](int k, int v) { top->fdd_ack = v ? (1 << k) : 0; };
+
+    top->sd_buff_wr = 0;
+    switch (sd_state) {
+    case SD_IDLE:
+        for (int k = 0; k < 2; k++) {
+            if (!fdd[k] || !(req_rd(k) || req_wr(k))) continue;
+            sd_slot = k;
+            sd_lba = k ? top->fdd_lba1 : top->fdd_lba0;
+            sd_idx = 0;
+            ack(k, 1);
+            if (req_rd(k)) {
+                memset(sd_data, 0, sizeof(sd_data));
+                uint64_t off = (uint64_t)sd_lba * 512;
+                if (off < fdd_size[k]) {
+                    fseeko(fdd[k], (off_t)off, SEEK_SET);
+                    size_t n = fread(sd_data, 1, (size_t)std::min<uint64_t>(512, fdd_size[k] - off), fdd[k]);
+                    (void)n;
+                }
+                sd_state = SD_READ;
+            }
+            else sd_state = SD_WRITE;
+            break;
+        }
+        break;
+    case SD_READ:
+        top->sd_buff_addr = sd_idx;
+        top->sd_buff_dout = sd_data[sd_idx];
+        top->sd_buff_wr = 1;
+        if (++sd_idx == 512) sd_state = SD_READ_END;
+        break;
+    case SD_READ_END:
+        ack(sd_slot, 0);
+        sd_state = SD_IDLE;
+        break;
+    case SD_WRITE:
+        // sd_buff_din is registered: it holds the byte addressed on the previous clock.
+        if (sd_idx > 0) sd_data[sd_idx - 1] = sd_slot ? top->fdd_buff_din1 : top->fdd_buff_din0;
+        if (sd_idx < 512) top->sd_buff_addr = sd_idx++;
+        else {
+            uint64_t off = (uint64_t)sd_lba * 512;
+            if (!opt.fdd_readonly && off < fdd_size[sd_slot]) {
+                fseeko(fdd[sd_slot], (off_t)off, SEEK_SET);
+                fwrite(sd_data, 1, (size_t)std::min<uint64_t>(512, fdd_size[sd_slot] - off), fdd[sd_slot]);
+                fflush(fdd[sd_slot]);
+            }
+            ack(sd_slot, 0);
+            sd_state = SD_IDLE;
+        }
+        break;
+    }
+}
+
+bool Sim::open_fdd(int k)
+{
+    fdd[k] = fopen(opt.fdd[k].c_str(), opt.fdd_readonly ? "rb" : "r+b");
+    if (!fdd[k]) { fprintf(stderr, "cannot open disk image %s\n", opt.fdd[k].c_str()); return false; }
+    fseeko(fdd[k], 0, SEEK_END);
+    fdd_size[k] = (uint64_t)ftello(fdd[k]);
+    return true;
+}
+
+void Sim::save_state()
+{
+    if (sd_state != SD_IDLE) { opt_save_pending = true; return; }   // not in the middle of a block transfer
+    VerilatedSave os;
+    os.open(opt.save_file.c_str());
+    os << *top;
+    HState h = {cycle, cpu_cycles, ps2_next_ok, frame, prev_hb, prev_vb, prev_m1, prev_io_wr, ps2_toggle, fb_w,
+                {fdd_size[0], fdd_size[1]}};
+    os.write(&h, sizeof(h));
+    os.close();
+    if (!opt.quiet) fprintf(stderr, "[sim] state saved at frame %u to %s\n", frame, opt.save_file.c_str());
+}
+
+bool Sim::load_state()
+{
+    VerilatedRestore is;
+    is.open(opt.load_file.c_str());
+    if (!is.isOpen()) { fprintf(stderr, "cannot read %s\n", opt.load_file.c_str()); return false; }
+    is >> *top;
+    HState h;
+    is.read(&h, sizeof(h));
+    is.close();
+    cycle = h.cycle; cpu_cycles = h.cpu_cycles; ps2_next_ok = h.ps2_next_ok; frame = h.frame;
+    prev_hb = h.prev_hb; prev_vb = h.prev_vb; prev_m1 = h.prev_m1; prev_io_wr = h.prev_io_wr;
+    ps2_toggle = h.ps2_toggle; fb_w = h.fb_w;
+    for (int k = 0; k < 2; k++) {
+        if (opt.fdd[k].empty()) continue;
+        if (!open_fdd(k)) return false;
+        if (fdd_size[k] != h.fdd_size[k]) fprintf(stderr, "warning: drive %d image size differs from the saved state\n", k + 1);
+    }
+    if (!opt.quiet) fprintf(stderr, "[sim] state loaded from %s, frame %u\n", opt.load_file.c_str(), frame);
+    return true;
+}
+
+// As hps_io: img_size on a shared bus, one img_mounted strobe per slot.
+bool Sim::mount_fdd(int k)
+{
+    if (!open_fdd(k)) return false;
+    top->img_size = fdd_size[k];
+    top->img_readonly = opt.fdd_readonly;
+    top->img_mounted = 1 << k;
+    clock();
+    top->img_mounted = 0;
+    for (int i = 0; i < 4; i++) clock();
+    if (!opt.quiet) fprintf(stderr, "[sim] drive %d: '%s', %llu bytes\n", k + 1, opt.fdd[k].c_str(), (unsigned long long)fdd_size[k]);
+    return true;
+}
+
+static void wav_header(FILE *f, uint32_t samples)
+{
+    uint32_t data = samples * 4, riff = 36 + data, fmt_len = 16, rate = 48000, brate = 48000 * 4;
+    uint16_t pcm = 1, ch = 2, align = 4, bits = 16;
+    fseek(f, 0, SEEK_SET);
+    fwrite("RIFF", 1, 4, f); fwrite(&riff, 4, 1, f); fwrite("WAVEfmt ", 1, 8, f);
+    fwrite(&fmt_len, 4, 1, f); fwrite(&pcm, 2, 1, f); fwrite(&ch, 2, 1, f); fwrite(&rate, 4, 1, f);
+    fwrite(&brate, 4, 1, f); fwrite(&align, 2, 1, f); fwrite(&bits, 2, 1, f);
+    fwrite("data", 1, 4, f); fwrite(&data, 4, 1, f);
+}
+
+void Sim::wav_close()
+{
+    if (!fwav) return;
+    wav_header(fwav, wav_samples);
+    fclose(fwav);
+    fwav = nullptr;
+}
 
 static bool read_file(const std::string &name, std::vector<uint8_t> &out)
 {
@@ -181,6 +376,7 @@ void Sim::ioctl_load(uint32_t base, const std::vector<uint8_t> &data)
         clock();
         top->ioctl_wr = 0;
         clock(); clock(); clock();
+        while (top->ioctl_wait) clock();
     }
     top->ioctl_download = 0;
 }
@@ -236,6 +432,16 @@ void Sim::clock()
     cycle++;
 
     if (top->cpu_ce) cpu_cycles++;
+    top->dbg_dump = 0;
+    if (opt.dump_cycle && cpu_cycles >= opt.dump_cycle && !dump_done) { top->dbg_dump = 1; dump_done = true; }
+    sd_step();
+    if (opt_save_pending && sd_state == SD_IDLE) { opt_save_pending = false; save_state(); }
+    if (fwav && started && cycle >= wav_next) {
+        int16_t lr[2] = {(int16_t)top->AUDIO_L, (int16_t)top->AUDIO_R};
+        fwrite(lr, 2, 2, fwav);
+        wav_samples++;
+        wav_next += CLK_HZ / 48000.0;
+    }
     if (ftrace && tracing()) {
         bool m1 = top->cpu_m1_n;
         if (!m1 && prev_m1) fprintf(ftrace, "%u,%llu,%04X\n", frame, (unsigned long long)cpu_cycles, top->cpu_pc);
@@ -269,6 +475,7 @@ void Sim::end_frame()
                 frame, cycle / CLK_HZ, fb_w, fb_h, top->cpu_pc, h);
     fb.clear(); fb_h = 0; line.clear();
     frame++;
+    if (!opt.save_file.empty() && frame == opt.save_frame) save_state();
     auto range = ps2_schedule.equal_range(frame);
     for (auto it = range.first; it != range.second; ++it) ps2_queue.push_back(it->second);
 }
@@ -336,9 +543,22 @@ int Sim::run()
         if (!(ftrace = fopen(opt.trace_file.c_str(), "w"))) { fprintf(stderr, "cannot write %s\n", opt.trace_file.c_str()); return 2; }
         fprintf(ftrace, "frame,cpu_cycle,pc\n");
     }
+    if (!opt.wav_file.empty()) {
+        if (!(fwav = fopen(opt.wav_file.c_str(), "wb"))) { fprintf(stderr, "cannot write %s\n", opt.wav_file.c_str()); return 2; }
+        wav_header(fwav, 0);
+    }
     if (!opt.io_file.empty()) {
         if (!(fio = fopen(opt.io_file.c_str(), "w"))) { fprintf(stderr, "cannot write %s\n", opt.io_file.c_str()); return 2; }
         fprintf(fio, "frame,pc,port,data\n");
+    }
+
+    if (!opt.load_file.empty()) {
+        if (!load_state()) return 2;
+        started = true;
+        wav_next = (double)cycle;
+        schedule_typing();
+        while (frame <= opt.stop_frame && !Verilated::gotFinish()) clock();
+        return finish();
     }
 
     top->reset = 1;
@@ -346,21 +566,32 @@ int Sim::run()
     top->ps2_key = 0;
     top->ioctl_download = 0; top->ioctl_wr = 0;
     for (int i = 0; i < 256; i++) clock();
+    // As on the MiSTer: the download holds the machine through ioctl_download, not through reset.
+    top->reset = 0;
     if (!load_roms()) return 2;
+    top->reset = 1;
     for (int i = 0; i < 256; i++) clock();
     top->reset = 0;
+    for (int k = 0; k < 2; k++)
+        if (!opt.fdd[k].empty() && !mount_fdd(k)) return 2;
     // Discard the partial picture before the first full frame.
     while (!top->VGA_VB) clock();
     while (top->VGA_VB) clock();
     frame = 0; cpu_cycles = 0; fb.clear(); fb_h = 0; line.clear();
     started = true;
+    wav_next = (double)cycle;
 
     schedule_typing();
     auto range = ps2_schedule.equal_range(0);
     for (auto it = range.first; it != range.second; ++it) ps2_queue.push_back(it->second);
 
     while (frame <= opt.stop_frame && !Verilated::gotFinish()) clock();
+    return finish();
+}
 
+int Sim::finish()
+{
+    wav_close();
     if (flog) fclose(flog);
     if (ftrace) fclose(ftrace);
     if (fio) fclose(fio);

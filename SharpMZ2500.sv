@@ -29,7 +29,6 @@ assign USER_OUT = '1;
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 // SDRAM: main RAM, kanji and dictionary ROMs will live here (docs/design.md). Unused for now.
-assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;
 
 `ifdef MISTER_DUAL_SDRAM
@@ -115,6 +114,7 @@ wire [15:0] ioctl_index;
 wire        ioctl_wr;
 wire [26:0] ioctl_addr;
 wire  [7:0] ioctl_dout;
+wire        ioctl_wait;
 
 hps_io #(.CONF_STR(CONF_STR)) hps_io
 (
@@ -137,7 +137,7 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 	.ioctl_wr(ioctl_wr),
 	.ioctl_addr(ioctl_addr),
 	.ioctl_dout(ioctl_dout),
-	.ioctl_wait(1'b0)
+	.ioctl_wait(ioctl_wait)
 );
 
 /////////////////  RESET  /////////////////////////
@@ -152,6 +152,28 @@ wire  [7:0] R, G, B;
 wire        HSync, VSync, HBlank, VBlank;
 wire [15:0] audio_l, audio_r;
 
+// SDRAM: main RAM 256 KB and the IPL ROM (rtl/mz2500.sv has the map), 8-bit accesses
+wire        dram_rd, dram_we, dram_ready;
+wire [24:0] dram_addr;
+wire  [7:0] dram_din;
+wire [15:0] dram_dout;
+
+sdram sdram
+(
+	.init(~pll_locked),
+	.clk(clk_sys),
+	.SDRAM_DQ(SDRAM_DQ), .SDRAM_A(SDRAM_A), .SDRAM_DQML(SDRAM_DQML), .SDRAM_DQMH(SDRAM_DQMH), .SDRAM_BA(SDRAM_BA),
+	.SDRAM_nCS(SDRAM_nCS), .SDRAM_nWE(SDRAM_nWE), .SDRAM_nRAS(SDRAM_nRAS), .SDRAM_nCAS(SDRAM_nCAS),
+	.SDRAM_CKE(SDRAM_CKE), .SDRAM_CLK(SDRAM_CLK),
+	.wtbt(2'b00),
+	.addr(dram_addr),
+	.dout(dram_dout),
+	.din({8'h00, dram_din}),
+	.we(dram_we),
+	.rd(dram_rd),
+	.ready(dram_ready)
+);
+
 mz2500 mz2500
 (
 	.clk_sys(clk_sys),
@@ -163,6 +185,9 @@ mz2500 mz2500
 	.ioctl_wr(ioctl_wr),
 	.ioctl_addr(ioctl_addr[24:0]),
 	.ioctl_dout(ioctl_dout),
+	.ioctl_wait(ioctl_wait),
+
+	.ram_rd(dram_rd), .ram_we(dram_we), .ram_addr(dram_addr), .ram_din(dram_din), .ram_dout(dram_dout[7:0]), .ram_ready(dram_ready),
 
 	.ce_pix(ce_pix),
 	.R(R), .G(G), .B(B),
