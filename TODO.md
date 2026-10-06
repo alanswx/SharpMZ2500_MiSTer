@@ -57,7 +57,9 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 - [x] Fixes found on the way: OPN port A read-back, 4096-colour palette, interrupt requests latched until acknowledged
       (a withdrawn request gave an acknowledge without a vector: CPU jumped through the FFh table entry), T80 v350
 - [x] Harness: save/load state, RAM dump at a CPU cycle, layer switches, interrupt trace, WAV, `make fast`
-- [ ] Hardware build that fits: the design needs more than the 553 M10K blocks with the kanji ROM in block RAM
+- [x] Hardware build that fits: kanji ROM moved to SDRAM (raster glyph fetch two cells ahead, through an arbiter
+      with the CPU), pixel mixer pipelined; 41% ALMs, 298/553 M10K, timing met (+0.054 ns setup at 85.9 MHz)
+- [ ] Try the RBF on a MiSTer: IPL screen, then Ys III from the OSD drive slots
 
 ## Phase 2: memory and MMU, complete
 
@@ -102,7 +104,8 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 - [ ] Drives 3 and 4; density check against the D88 sector flag (CSP 2023)
 - [ ] OSD S slots for D88 (and raw 2D/2DD if needed), write back
 - [x] Harness `--fdd`/`--fdd-b`; Ys III boots to its intro
-- [ ] Regression test for a disk boot (frame hash), OSD S slots in SharpMZ2500.sv
+- [x] Regression test `ys3_1000` (GAMES=1), OSD S0/S1 slots in SharpMZ2500.sv
+- [x] Ys III at frame 3000 shows the same intro page as BubiZ-2500
 
 ## Phase 7: sound
 
@@ -132,9 +135,10 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 ## Phase 11: SDRAM
 
 - [x] SDRAM controller (Sorgelig's, from FM-7_MiSTer) for the CPU; behavioural model in the sim
-- [ ] Raster slot (kanji glyph prefetch) so the kanji ROM can leave block RAM
+- [x] Raster slot: the text raster requests each kanji ROM byte two cells ahead (tagged request/ack)
 - [x] Main RAM 256 KB and the IPL in SDRAM, IPL loaded through ioctl_wait
-- [ ] Kanji 256 KB, kanji2 128 KB, dictionary 256 KB, phone 16 KB in SDRAM
+- [x] Kanji 256 KB in SDRAM (080000), CPU window too
+- [ ] Kanji2 128 KB, dictionary 256 KB, phone 16 KB in SDRAM
 - [ ] Kanji glyph prefetch per text line into block RAM for the raster (FM-7_MiSTer did the same)
 - [ ] Kanji and dictionary access through pages 39/3A and ports B8-B9, CE-CF; kanji on the text layer
 - [ ] Sim model of the SDRAM in the harness (C++ side) so the sim keeps working

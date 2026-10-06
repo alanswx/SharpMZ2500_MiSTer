@@ -9,7 +9,7 @@
 //     I/O waits (FDC, PIO, OPN, RTC) and the display-period WAIT for text VRAM / PCG and GVRAM.
 //   * MMU: eight 8 KB windows, page registers B4/B5, IPL reset map (34-37, 04-07) and the "special" reset
 //     (8255 PC1 rising: map 00-07 and CPU reset), IPL reset when 8255 PC3 stays low for 100 us.
-//   * Memory: 256 KB main RAM and the 32 KB IPL ROM in SDRAM, kanji ROM 256 KB in block RAM, ROMs loaded
+//   * Memory: 256 KB main RAM, the 32 KB IPL ROM and the 256 KB kanji ROM in SDRAM, ROMs loaded
 //     through ioctl (boot.rom layout of docs/roms.md: IPL at 000000, kanji at 010000).
 //   * Devices: video (mz2500_video: text CRTC, graphics controller, VRAMs), interrupt block (C6/C7), 8253
 //     (E4-E7, gate pulses F0-F3), 8255 (E0-E3), Z80 PIO port A/B for the keyboard (E8-EB), keyboard matrix,
@@ -235,15 +235,26 @@ wire [12:0] cur_off  = cpu_a[12:0];
 wire ld_ipl   = ioctl_download && ioctl_addr[24:15] == 10'd0;
 wire ld_kanji = ioctl_download && ioctl_addr[24:16] >= 9'd1 && ioctl_addr[24:16] <= 9'd4;
 
-// Main RAM 256 KB (pages 00-1F) and the IPL ROM (pages 34-37) are in SDRAM: byte address 000000-03FFFF for the
-// RAM, 040000-047FFF for the IPL. The controller (rtl/sdram.sv) takes a request on a rising edge of rd or we and
-// drops 'ready' until it is done. CPU reads are issued at the start of the memory cycle and the CPU waits only if
-// the data isn't back by T2 (at 6 MHz it normally is: T1 to T2 is 14 clk_sys); writes are posted at the end of
-// the cycle. The IPL is written here during the ROM download (ioctl_wait holds hps_io).
-wire        ram_page     = !cur_page[5] || cur_page[5:2] == 4'b1101;
-wire [24:0] cpu_ram_addr = cur_page[5] ? {6'd0, 1'b1, 3'b000, cur_page[1:0], cur_off} : {7'd0, cur_page[4:0], cur_off};
+// SDRAM holds main RAM 256 KB (pages 00-1F) at 000000-03FFFF, the IPL ROM (pages 34-37) at 040000-047FFF and the
+// kanji ROM at 080000-0BFFFF (CPU window: page 39 with CF bit 7; text raster glyph fetches). The controller
+// (rtl/sdram.sv) takes a request on a rising edge of rd or we and drops 'ready' until it is done. Clients, in
+// priority order: the text raster (a glyph byte per text cell, requested two cells ahead of display), posted CPU
+// writes and ROM-download writes, CPU reads (issued at the start of the memory cycle; the CPU waits only if the data
+// isn't back by T2, at 6 MHz it normally is: T1 to T2 is 14 clk_sys).
+wire        kwin         = cur_page == 6'h39 && kanji_bank[7] && cur_off[12:11] == 2'd0;
+wire        ram_page     = !cur_page[5] || cur_page[5:2] == 4'b1101 || kwin;
+wire [24:0] cpu_ram_addr = kwin        ? {5'd0, 2'b10, kanji_bank[6:0], cur_off[10:0]} :
+                           cur_page[5] ? {6'd0, 1'b1, 3'b000, cur_page[1:0], cur_off} : {7'd0, cur_page[4:0], cur_off};
 
-localparam RAM_IDLE = 2'd0, RAM_RD = 2'd1, RAM_WR = 2'd2;
+wire [17:0] kanji_ld_addr = ioctl_addr[17:0] - 18'h10000;
+wire [17:0] kanji_raddr;
+wire        kanji_req;
+wire  [6:0] kanji_tag;
+reg         kanji_ack;
+reg   [6:0] kanji_ack_tag;
+reg   [7:0] kanji_q;
+
+localparam RAM_IDLE = 2'd0, RAM_RD = 2'd1, RAM_WR = 2'd2, RAM_KR = 2'd3;
 reg  [1:0] ram_st;
 reg  [1:0] ram_cnt;
 reg        ram_wpend;
@@ -253,10 +264,15 @@ reg        ram_rdone;
 reg  [7:0] ram_q;
 
 always @(posedge clk_sys) begin
+	kanji_ack <= 1'b0;
 	if (cyc_start) ram_rdone <= 1'b0;
 	case (ram_st)
 		RAM_IDLE:
-			if (ram_wpend) begin
+			if (kanji_req && !ioctl_download) begin
+				ram_rd <= 1'b1; ram_addr <= {5'd0, 2'b10, kanji_raddr}; kanji_ack_tag <= kanji_tag;
+				ram_cnt <= 2'd3; ram_st <= RAM_KR;
+			end
+			else if (ram_wpend) begin
 				ram_we <= 1'b1; ram_addr <= ram_waddr; ram_din <= ram_wdata;
 				ram_wpend <= 1'b0; ram_cnt <= 2'd3; ram_st <= RAM_WR;
 			end
@@ -266,10 +282,12 @@ always @(posedge clk_sys) begin
 		RAM_RD:
 			if (ram_cnt != 2'd0) ram_cnt <= ram_cnt - 2'd1;
 			else if (ram_ready) begin ram_q <= ram_dout; ram_rdone <= 1'b1; ram_rd <= 1'b0; ram_st <= RAM_IDLE; end
+		RAM_KR:
+			if (ram_cnt != 2'd0) ram_cnt <= ram_cnt - 2'd1;
+			else if (ram_ready) begin kanji_q <= ram_dout; kanji_ack <= 1'b1; ram_rd <= 1'b0; ram_st <= RAM_IDLE; end
 		RAM_WR:
 			if (ram_cnt != 2'd0) ram_cnt <= ram_cnt - 2'd1;
 			else if (ram_ready) begin ram_we <= 1'b0; ram_st <= RAM_IDLE; end
-		default: ram_st <= RAM_IDLE;
 	endcase
 	// new writes (after the state machine so they win over the clear above)
 	if (mem_wr_end && !cur_page[5]) begin
@@ -278,6 +296,9 @@ always @(posedge clk_sys) begin
 	if (ld_ipl && ioctl_wr) begin
 		ram_wpend <= 1'b1; ram_waddr <= 25'h40000 | {10'd0, ioctl_addr[14:0]}; ram_wdata <= ioctl_dout;
 	end
+	if (ld_kanji && ioctl_wr) begin
+		ram_wpend <= 1'b1; ram_waddr <= {5'd0, 2'b10, kanji_ld_addr}; ram_wdata <= ioctl_dout;
+	end
 	if (reset) begin
 		ram_st <= RAM_IDLE; ram_rd <= 1'b0; ram_we <= 1'b0; ram_wpend <= 1'b0; ram_rdone <= 1'b0;
 	end
@@ -285,21 +306,6 @@ end
 
 assign ioctl_wait = ram_wpend || ram_st != RAM_IDLE;
 wire   ram_wait    = mem_rd && ram_page && !ram_rdone;
-
-// Kanji ROM 256 KB: CPU window (page 39 with CF bit 7) on port A, text raster on port B
-wire [17:0] kanji_raddr;
-wire  [7:0] kanji_rdata, kanji_cdata;
-wire [17:0] kanji_ld_addr = ioctl_addr[17:0] - 18'h10000;
-dpram #(.AW(18), .DW(8)) kanji_rom
-(
-	.clk(clk_sys),
-	.a_addr(ioctl_download ? kanji_ld_addr : {kanji_bank[6:0], cur_off[10:0]}),
-	.a_we(ld_kanji & ioctl_wr),
-	.a_din(ioctl_dout),
-	.a_dout(kanji_cdata),
-	.b_addr(kanji_raddr),
-	.b_dout(kanji_rdata)
-);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Video
@@ -341,7 +347,11 @@ mz2500_video video
 	.pal4096(~opn_pa[2]),
 
 	.kanji_addr(kanji_raddr),
-	.kanji_data(kanji_rdata),
+	.kanji_req(kanji_req),
+	.kanji_tag(kanji_tag),
+	.kanji_ack(kanji_ack),
+	.kanji_ack_tag(kanji_ack_tag),
+	.kanji_data(kanji_q),
 
 	.ce_pix(ce_pix),
 	.R(R), .G(G), .B(B),
@@ -623,7 +633,7 @@ always @(*) begin
 	casez (cur_page)
 		6'b0?????, 6'b1101??: mem_dout = ram_q;
 		6'b10????, 6'b1100??, 6'h38: mem_dout = vid_mem_dout;
-		6'h39: mem_dout = (kanji_bank[7] && cur_off[12:11] == 2'd0) ? kanji_cdata : vid_mem_dout;
+		6'h39: mem_dout = kwin ? ram_q : vid_mem_dout;
 		default: mem_dout = 8'hFF;
 	endcase
 end

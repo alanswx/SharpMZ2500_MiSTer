@@ -54,8 +54,13 @@ module mz2500_video
 	input            screen_mask,     // 8255 port C bit 0 (VGATE): black screen
 	input            pal4096,         // OPN port A bit 2 = 0: output through the 4096-colour board (AE)
 
-	// Kanji ROM raster port (one clock latency)
+	// Kanji ROM raster port (the ROM is in SDRAM): kanji_req with kanji_addr/kanji_tag, answered by a one-clock
+	// kanji_ack with the same tag and kanji_data
 	output reg [17:0] kanji_addr,
+	output reg       kanji_req,
+	output reg [6:0] kanji_tag,
+	input            kanji_ack,
+	input      [6:0] kanji_ack_tag,
 	input      [7:0] kanji_data,
 
 	output reg       ce_pix,
@@ -548,10 +553,17 @@ endfunction
 wire [10:0] cell_addr = column80 ? (t_base + {4'd0, f_slot}) :
                         (t_base + {5'd0, f_slot[6:1]} + (f_slot[0] ? 11'h400 : 11'h000));
 
+reg [7:0] f_kanji;          // glyph byte from the kanji ROM for this slot
+
 always @(posedge clk) begin
 	g_adv <= 1'b0;
+	if (kanji_req && kanji_ack && kanji_ack_tag == kanji_tag) begin
+		f_kanji   <= kanji_data;
+		kanji_req <= 1'b0;
+	end
 	if (reset) begin
 		f_run <= 1'b0;
+		kanji_req <= 1'b0;
 	end
 	else if (slot_start) begin
 		f_run  <= (slot < 7'd80);
@@ -576,11 +588,16 @@ always @(posedge clk) begin
 				                                                  {tv_b_dout[2][5:0], tv_b_dout[0][7:1], 4'b0000})
 				              + {14'd0, t_gl};
 				pcg_b_addr <= font8 ? {tv_b_dout[0], t_gl[2:0]} : {tv_b_dout[0][7:1], t_gl};
+				// the glyph comes from the kanji ROM (SDRAM): request it; step 3 waits for the answer
+				kanji_req <= tv_b_dout[2][7] && tv_b_dout[1][5:3] == 3'b000 && t_rowok;
+				kanji_tag <= f_slot;
+				f_kanji   <= 8'h00;
 				f_b0 <= gv_b_dout[0]; f_r0 <= gv_b_dout[1]; f_g0 <= gv_b_dout[2]; f_i0 <= gv_b_dout[3];
 				gv_b_addr <= (g_chain_prev ^ 15'h2000) | gex;   // second screen of the 320-dot modes
 			end
+			4'd3: if (kanji_req && !(kanji_ack && kanji_ack_tag == kanji_tag)) f_step <= 4'd3;
 			4'd4: begin
-				tres[f_slot[0]] <= text_cell(f_attr, f_t2, kanji_data, pcg_b_dout[0], pcg_b_dout[1], pcg_b_dout[2],
+				tres[f_slot[0]] <= text_cell(f_attr, f_t2, f_kanji, pcg_b_dout[0], pcg_b_dout[1], pcg_b_dout[2],
 				                             pcg_b_dout[3], t_rowok);
 				if (m640_200 || m640_16)
 					gres[f_slot[0]] <= gpix8(f_b0, f_r0, f_g0, f_i0, cgreg[24][3:0]);
@@ -678,7 +695,14 @@ function [23:0] digital(input [2:0] c);
 endfunction
 
 wire [3:0] back16 = {textreg[11][0], textreg[12][0], textreg[11][5], textreg[11][2]};
-wire [3:0] pg     = palreg[gval][3:0];
+// Two-stage pixel pipeline: at ce_pix the text value, graphics value and window flags of the dot are registered
+// (p_*); one clock later the palette and priority give R, G, B. A dot lasts at least 2 clocks (4 at 85.9 MHz),
+// so the output is stable when the next ce_pix samples it. Blanking and syncs take the same two steps.
+reg  [3:0] p_tval, p_gval;
+reg        p_gin, p_act, p_hb, p_vb, p_hs, p_vs;
+reg        ce_pix_d;
+
+wire [3:0] pg     = palreg[p_gval][3:0];
 wire [23:0] gcolor16 = pal16((pg != 4'd0) ? (pg & cg_mask) : (back16 & cg_mask));
 
 // 4096-colour board (CSP palette4096tmp): every colour goes through a palette register, text colour t (1-7)
@@ -689,8 +713,8 @@ endfunction
 function [23:0] c4096(input [3:0] i);
 	c4096 = {p4r[i], 4'h0, p4g[i], 4'h0, p4b[i], 4'h0};
 endfunction
-wire [23:0] gcolor = pal4096 ? c4096(gmap(gval)) : gcolor16;
-wire [23:0] tcolor = pal4096 ? c4096(gmap({1'b1, tval[2:0]})) : digital(tval[2:0]);
+wire [23:0] gcolor = pal4096 ? c4096(gmap(p_gval)) : gcolor16;
+wire [23:0] tcolor = pal4096 ? c4096(gmap({1'b1, p_tval[2:0]})) : digital(p_tval[2:0]);
 wire [23:0] bcolor = pal4096 ? c4096(palreg[back16][3:0]) : pal16(palreg[back16][3:0]);
 wire [23:0] kcolor = pal4096 ? c4096(gmap(4'd0)) : 24'd0;     // non-transparent black inside the window
 
@@ -705,17 +729,17 @@ end
 
 reg [23:0] rgb;
 always @(*) begin
-	if (dbg_notext) rgb = g_in ? gcolor : bcolor;
-	else if (dbg_nogfx) rgb = (tval == 4'd0 || tval == 4'd8) ? 24'd0 : digital(tval[2:0]);
-	else if (g_in) begin
-		if (tval == 4'd0 || palreg[gval][4]) rgb = gcolor;
-		else if (tval == 4'd8)               rgb = kcolor;
-		else                                 rgb = tcolor;
+	if (dbg_notext) rgb = p_gin ? gcolor : bcolor;
+	else if (dbg_nogfx) rgb = (p_tval == 4'd0 || p_tval == 4'd8) ? 24'd0 : digital(p_tval[2:0]);
+	else if (p_gin) begin
+		if (p_tval == 4'd0 || palreg[p_gval][4]) rgb = gcolor;
+		else if (p_tval == 4'd8)                 rgb = kcolor;
+		else                                     rgb = tcolor;
 	end
 	else begin
-		if (tval == 4'd0)      rgb = bcolor;
-		else if (tval == 4'd8) rgb = 24'd0;
-		else                   rgb = tcolor;
+		if (p_tval == 4'd0)      rgb = bcolor;
+		else if (p_tval == 4'd8) rgb = 24'd0;
+		else                     rgb = tcolor;
 	end
 	if (screen_mask) rgb = 24'd0;
 end
@@ -734,11 +758,18 @@ always @(posedge clk) begin
 			else      gcur <= gres[slot_next[0]];
 		end
 
-		{R, G, B} <= act ? rgb : 24'd0;
-		HBlank <= !(x >= 0 && x < 640);
-		VBlank <= !y_act;
-		HSync  <= lines400 ? (hc >= 10'd736 && hc < 10'd800) : (hc >= 10'd768 && hc < 10'd832);
-		VSync  <= lines400 ? (v >= 9'd442 && v < 9'd445) : (v >= 9'd250 && v < 9'd253);
+		// stage 1
+		p_tval <= tval; p_gval <= gval; p_gin <= g_in; p_act <= act;
+		p_hb <= !(x >= 0 && x < 640);
+		p_vb <= !y_act;
+		p_hs <= lines400 ? (hc >= 10'd736 && hc < 10'd800) : (hc >= 10'd768 && hc < 10'd832);
+		p_vs <= lines400 ? (v >= 9'd442 && v < 9'd445) : (v >= 9'd250 && v < 9'd253);
+	end
+	// stage 2
+	ce_pix_d <= ce_pix;
+	if (ce_pix_d) begin
+		{R, G, B} <= p_act ? rgb : 24'd0;
+		HBlank <= p_hb; VBlank <= p_vb; HSync <= p_hs; VSync <= p_vs;
 	end
 end
 

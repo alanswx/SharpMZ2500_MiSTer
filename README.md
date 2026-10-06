@@ -14,14 +14,18 @@ In the Verilator simulation, with the real IPL and kanji ROMs:
 - Power on with no media: the IPL's "loading error / Press F or C" screen, identical pixel for pixel to BubiZ-2500's
   (CSP core) at 400 lines and to MAME's at 200 lines (`make test`).
 - **Ys III (Falcom, 1989)** from its two D88 disks: the IPL boots it, it loads, shows the Falcom copyright screen,
-  fades it out through the 4096-colour palette and plays the scrolling intro with its YM2203 music driver.
+  fades it out through the 4096-colour palette and plays the scrolling intro with its YM2203 music; at frame 3000
+  it is on the same intro page as BubiZ-2500 (`GAMES=1 make test` checks frame 1000).
+
+The FPGA build fits (41% logic, 298/553 block RAMs, timing met at 85.9 MHz) with drives 1 and 2 in the OSD; it has
+not been tried on a MiSTer yet.
 
 What exists (`rtl/`): Z80 (T80 v350) with CSP's wait states; the MMU and its reset maps; 256 KB main RAM and the IPL
-in SDRAM, kanji ROM in block RAM, ROMs from `boot.rom`; text CRTC and graphics controller with text VRAM, PCG and
+and the kanji ROM in SDRAM (the text raster fetches glyphs two cells ahead), ROMs from `boot.rom`; text CRTC and graphics controller with text VRAM, PCG and
 graphics VRAM (16-colour modes, RMW window, clear, scroll, palette and priority, the 4096-colour board); the interrupt
 block, 8253, 8255, Z80 PIO and keyboard; the MB8876 floppy controller with two D88 drives (wd1793.sv); the YM2203
-(jotego jt03) and the beeper. Not yet: 256-colour graphics, tape, RTC, mouse, SIO, the MZ-80B/2000 modes, a hardware
-build that fits (block RAM, see TODO.md): see [TODO.md](TODO.md).
+(jotego jt03) and the beeper. Not yet: 256-colour graphics, tape, RTC, mouse, SIO, the MZ-80B/2000 modes: see
+[TODO.md](TODO.md).
 
 ROMs: build `boot.rom` from your dumps with `tools/make_bootrom.sh IPL.ROM KANJI.ROM boot.rom` (CRCs in
 docs/roms.md) and put it in `games/SharpMZ2500/` on the SD card; the sim reads `software/roms/extracted/` by default
@@ -31,7 +35,7 @@ Research: hardware reference, ROM list, software sources and reference emulators
 emulator is BubiZ-2500 (Takeda's EmuZ-2500 core with a headless mode), with MAME as a second opinion; both run
 headless on macOS (docs/emulators.md).
 
-Next: fit the FPGA (kanji ROM to SDRAM), more titles from the MAME list, 256-colour modes, RTC.
+Next: try it on a MiSTer, more titles from the MAME list, 256-colour modes, RTC.
 
 ## Layout
 

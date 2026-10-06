@@ -58,7 +58,6 @@ assign HDMI_FREEZE = 0;
 assign HDMI_BLACKOUT = 0;
 assign HDMI_BOB_DEINT = 0;
 
-assign LED_DISK = 0;
 assign LED_POWER = 0;
 assign BUTTONS = 0;
 
@@ -67,16 +66,17 @@ assign BUTTONS = 0;
 `include "build_id.v"
 
 // Placeholder menu. Planned entries (docs/design.md): boot.rom / IPL, CG, kanji and dictionary ROM loading,
-// S0-S3 floppy drives (D88/2D), tape image, boot mode switch, model (2500/2520), mouse, joystick.
+// Planned: drives 3-4, tape image, boot mode switch, model (2500/2520), mouse, joystick.
 localparam CONF_STR =
 {
 	"SharpMZ2500;;",
 	"-;",
 	"-,Needs games/SharpMZ2500/boot.rom (IPL + kanji);",
 	"-;",
+	"S0,D88,Drive 1;",
+	"S1,D88,Drive 2;",
+	"-;",
 	"O[1],Lines (front switch),400 (24 kHz),200 (15 kHz);",
-	"O[3:2],Boot Mode,MZ-2500,MZ-2000,MZ-80B;",
-	"O[4],Model,MZ-2500,MZ-2520;",
 	"O[6:5],Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
 	"O[122:121],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"-;",
@@ -116,7 +116,20 @@ wire [26:0] ioctl_addr;
 wire  [7:0] ioctl_dout;
 wire        ioctl_wait;
 
-hps_io #(.CONF_STR(CONF_STR)) hps_io
+// Floppy image slots S0/S1 (drives 1 and 2), 512-byte blocks
+wire  [1:0] img_mounted;
+wire        img_readonly;
+wire [63:0] img_size;
+wire [31:0] sd_lba[2];
+wire  [1:0] sd_rd, sd_wr, sd_ack;
+wire  [8:0] sd_buff_addr;
+wire  [7:0] sd_buff_dout;
+wire  [7:0] sd_buff_din[2];
+wire        sd_buff_wr;
+wire        fdd_busy;
+assign LED_DISK = {1'b0, fdd_busy};
+
+hps_io #(.CONF_STR(CONF_STR), .VDNUM(2)) hps_io
 (
 	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
@@ -137,7 +150,20 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 	.ioctl_wr(ioctl_wr),
 	.ioctl_addr(ioctl_addr),
 	.ioctl_dout(ioctl_dout),
-	.ioctl_wait(ioctl_wait)
+	.ioctl_wait(ioctl_wait),
+
+	.img_mounted(img_mounted),
+	.img_readonly(img_readonly),
+	.img_size(img_size),
+	.sd_lba(sd_lba),
+	.sd_blk_cnt('{6'd0, 6'd0}),
+	.sd_rd(sd_rd),
+	.sd_wr(sd_wr),
+	.sd_ack(sd_ack),
+	.sd_buff_addr(sd_buff_addr),
+	.sd_buff_dout(sd_buff_dout),
+	.sd_buff_din(sd_buff_din),
+	.sd_buff_wr(sd_buff_wr)
 );
 
 /////////////////  RESET  /////////////////////////
@@ -186,6 +212,11 @@ mz2500 mz2500
 	.ioctl_addr(ioctl_addr[24:0]),
 	.ioctl_dout(ioctl_dout),
 	.ioctl_wait(ioctl_wait),
+
+	.img_mounted(img_mounted), .img_readonly(img_readonly), .img_size(img_size),
+	.sd_lba(sd_lba), .sd_rd(sd_rd), .sd_wr(sd_wr), .sd_ack(sd_ack),
+	.sd_buff_addr(sd_buff_addr), .sd_buff_dout(sd_buff_dout), .sd_buff_din(sd_buff_din), .sd_buff_wr(sd_buff_wr),
+	.fdd_busy(fdd_busy),
 
 	.ram_rd(dram_rd), .ram_we(dram_we), .ram_addr(dram_addr), .ram_din(dram_din), .ram_dout(dram_dout[7:0]), .ram_ready(dram_ready),
 

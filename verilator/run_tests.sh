@@ -7,6 +7,9 @@
 #   ipl_200   the same with the 200-line switch, frame 450; identical to MAME's 640x200 screenshot
 #             (refs/compare/mame_ipl_nodisk_f1500.png).
 #
+#   ys3_1000  (GAMES=1 only, about 8 minutes) Ys III from its two D88 disks: frame 1000 hash, in the scrolling intro.
+#             Needs the disks in ../software/archive.org/mz-2500/extracted/ (docs/software.md); read-only.
+#
 # Needs the IPL and kanji ROMs in ../software/roms/extracted/ (docs/roms.md), or set ROM=path/to/boot.rom.
 # Tests run in parallel; each writes to out/test/<name>.log. Set UPDATE=1 to rewrite the expected files.
 # Each IPL test takes about 3 minutes (the sim runs at about 2.3 frames per second).
@@ -28,6 +31,11 @@ run() {   # run NAME ARGS...
 
 run ipl_400 --lines 400 --stop-at-frame 400 --screenshot 400 --frame-log "$OUT/ipl_400.csv"
 run ipl_200 --lines 200 --stop-at-frame 450 --screenshot 450 --frame-log "$OUT/ipl_200.csv"
+YS3="../software/archive.org/mz-2500/extracted/MZ2500 同人自作フリーゲームセット (起動確認済)"
+if [ -n "$GAMES" ]; then
+    run ys3_1000 --fdd "$YS3/Ys'3 (19xx)(-)(Program).D88" --fdd-b "$YS3/Ys'3 (19xx)(-)(User).D88" --fdd-readonly \
+        --stop-at-frame 1000 --screenshot 1000 --frame-log "$OUT/ys3_1000.csv"
+fi
 
 fail=0
 for i in "${!pids[@]}"; do
@@ -46,5 +54,6 @@ check() {   # check NAME ACTUAL
 
 check ipl_400 "$(hash_at "$OUT/ipl_400.csv" 400)"
 check ipl_200 "$(hash_at "$OUT/ipl_200.csv" 450)"
+[ -n "$GAMES" ] && check ys3_1000 "$(hash_at "$OUT/ys3_1000.csv" 1000)"
 
 exit $fail
