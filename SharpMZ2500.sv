@@ -111,6 +111,7 @@ wire [127:0] status;
 wire [10:0] ps2_key;
 wire [31:0] joystick_0, joystick_1;
 wire [64:0] rtc;
+wire [24:0] ps2_mouse;
 
 wire        ioctl_download;
 wire [15:0] ioctl_index;
@@ -148,6 +149,7 @@ hps_io #(.CONF_STR(CONF_STR), .VDNUM(2)) hps_io
 	.joystick_0(joystick_0),
 	.joystick_1(joystick_1),
 	.RTC(rtc),
+	.ps2_mouse(ps2_mouse),
 
 	.ioctl_download(ioctl_download),
 	.ioctl_index(ioctl_index),
@@ -213,6 +215,7 @@ mz2500 mz2500
 	.rtc(rtc),
 	.joy0(joystick_0[5:0]),
 	.joy1(joystick_1[5:0]),
+	.ps2_mouse(ps2_mouse),
 
 	.ioctl_download(ioctl_download && ioctl_index == 16'd0),
 	.ioctl_wr(ioctl_wr),

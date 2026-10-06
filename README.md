@@ -17,15 +17,20 @@ In the Verilator simulation, with the real IPL and kanji ROMs:
   fades it out through the 4096-colour palette and plays the scrolling intro with its YM2203 music; at frame 3000
   it is on the same intro page as BubiZ-2500 (`GAMES=1 make test` checks frame 1000).
 
-The FPGA build fits (41% logic, 298/553 block RAMs, timing met at 85.9 MHz) with drives 1 and 2 in the OSD; it has
-not been tried on a MiSTer yet.
+- **Hoshikuzu-bako / Dust Box** disk magazine (1990-92): the IPL boots BASIC-M25 from the disk, which runs the
+  issue's program; the 256-colour title screens of issues 1-7 and Special 1 match BubiZ-2500 pixel for pixel at
+  frame 6000 (vol. 2 differs only in an animated raindrop caught at another moment).
+
+The FPGA build fits (43% logic, 298/553 block RAMs, timing met at 85.9 MHz with +0.69 ns) with drives 1 and 2 in
+the OSD; it has not been tried on a MiSTer yet.
 
 What exists (`rtl/`): Z80 (T80 v350) with CSP's wait states; the MMU and its reset maps; 256 KB main RAM and the IPL
 and the kanji ROM in SDRAM (the text raster fetches glyphs two cells ahead), ROMs from `boot.rom`; text CRTC and graphics controller with text VRAM, PCG and
-graphics VRAM (16-colour modes, RMW window, clear, scroll, palette and priority, the 4096-colour board); the interrupt
-block, 8253, 8255, Z80 PIO and keyboard; the MB8876 floppy controller with two D88 drives (wd1793.sv); the YM2203
-(jotego jt03) and the beeper. Not yet: 256-colour graphics, tape, RTC, mouse, SIO, the MZ-80B/2000 modes: see
-[TODO.md](TODO.md).
+graphics VRAM (16- and 256-colour modes, RMW window, clear, scroll, palette and priority, the 4096-colour board,
+64-colour text); the interrupt block, 8253, 8255, Z80 PIO and keyboard; the MB8876 floppy controller with two D88
+drives (wd1793.sv); the YM2203 (jotego jt03) and the beeper; the RP5C15 clock (from MiSTer's RTC); the joystick
+port; a minimal Z80 SIO with the mouse on channel B. Not yet: tape, RS-232C, drives 3-4, the MZ-80B/2000 modes:
+see [TODO.md](TODO.md).
 
 ROMs: build `boot.rom` from your dumps with `tools/make_bootrom.sh IPL.ROM KANJI.ROM boot.rom` (CRCs in
 docs/roms.md) and put it in `games/SharpMZ2500/` on the SD card; the sim reads `software/roms/extracted/` by default

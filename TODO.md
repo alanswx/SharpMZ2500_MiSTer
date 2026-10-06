@@ -61,6 +61,13 @@ CPU trace from reset matching the reference emulator for the first few thousand 
       with the CPU), pixel mixer pipelined; 41% ALMs, 298/553 M10K, timing met (+0.054 ns setup at 85.9 MHz)
 - [ ] Try the RBF on a MiSTer: IPL screen, then Ys III from the OSD drive slots
 
+## Milestone 3: the Dust Box disk magazine (done in the sim)
+
+- [x] All Dust Box disks boot BASIC-M25 and their programs; titles of issues 1-7 and Special 1 match BubiZ
+- [x] Fixes: WD1793 byte watchdog at real speed (the IPL skips a sector with READ SECTOR + wait for BUSY), the CPU
+      waits on a write while the SDRAM write buffer is full (lost PUSH bytes), kanji glyph request queue
+- [ ] Issues 8-16 (batch running), the intro after a key press (greyscale palette effect)
+
 ## Phase 2: memory and MMU, complete
 
 - [ ] All MMU pages: main RAM 00-1F (256 KB), graphics VRAM 20-2F, VRAM read-modify-write window 30-33 (CSP layout:
@@ -72,7 +79,7 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 ## Phase 3: video, text
 
 - [x] 80/40 columns, 25/20 rows, attributes (reverse, blink) (milestone 1; untested beyond the IPL screen)
-- [ ] 64 colours in 40 columns (text R00 CP = 00), text in 256-colour mode (dimmed colours)
+- [x] 64 colours in 40 columns (text R00 CP = 00) and dimmed text in 256-colour mode (untested)
 - [x] PCG RAM, mono and 8-colour (milestone 1; untested)
 - [ ] 40-column combine modes checked against CSP
 - [x] Vertical scroll (R09), text window (milestone 1; untested)
@@ -83,7 +90,7 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 
 - [x] Graphics VRAM in block RAM, 4 planes read per 8-pixel group
 - [x] Modes 03, 93, 14/15/94/95, 17/97 with split scroll (SAD0-2, SLN1) and HSCRL (milestone 1; untested)
-- [ ] 256-colour modes 1D/9D/19/99 (palette from text R0A, background R0B/R0C, priority256)
+- [x] 256-colour modes 1D/9D/19/99 (palette from text R0A, background R0B/R0C, priority256): Dust Box titles
 - [ ] Windowed display, dot scroll in X and Y, text/graphics priority
 - [x] Plane latches and compare read (BC-BF), the plane window pages 30-33, clear screen
 - [x] 16-colour palette (CSP analogue monitor levels), priority bit, background colour, F6 mask
@@ -95,7 +102,7 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 
 - [x] PS/2 to MZ-2500 matrix through the PIO, including KANA, GRAPH, HENKAN, MUHENKAN, function keys, keypad (untested)
 - [ ] `kb_*` tests typing at the IPL / BASIC prompt (harness `--type`)
-- [ ] Joysticks (port EF, Atari/MSX type) from MiSTer joystick 1/2
+- [x] Joysticks (port EF) from MiSTer joystick 1/2
 
 ## Phase 6: floppy
 
@@ -117,13 +124,14 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 
 ## Phase 8: RTC
 
-- [ ] RP5C15 at CC-CD (registers, banks, alarm), seeded from hps_io's RTC bus; interrupt through C6/C7
+- [x] RP5C15 at CC (`rtl/rp5c15.sv`: registers, banks, alarm, pulse on OPN port B bit 3), seeded from hps_io's RTC
+- [ ] RTC alarm interrupt through C6/C7 (CSP doesn't drive it either)
 - [ ] Test: the IPL/BASIC clock shows the MiSTer time
 
 ## Phase 9: mouse
 
-- [ ] Z80 SIO channel B (async receive only to start), serial mouse protocol (docs/hardware.md) from MiSTer's PS/2 mouse
-- [ ] OPN port A mouse select line
+- [x] Minimal Z80 SIO (`rtl/mz2500_sio.sv`: registers, 3-byte receive FIFO, receive interrupts in the daisy chain), mouse packet on channel B DTR from MiSTer's PS/2 mouse; harness `--mouse` (untested with software)
+- [x] OPN port A mouse select line
 
 ## Phase 10: MZ-80B / MZ-2000 compatibility mode
 

@@ -30,6 +30,7 @@ module mz2500
 	input  [64:0] rtc,            // hps_io RTC: BCD time and date, bit 64 toggles on an update
 	input   [5:0] joy0,           // MiSTer joysticks 1 and 2: right, left, down, up, trigger A, trigger B (active high)
 	input   [5:0] joy1,
+	input  [24:0] ps2_mouse,      // hps_io ps2_mouse
 
 	// ROM download (hps_io ioctl): boot.rom = IPL at 000000, kanji ROM at 010000
 	input         ioctl_download,
@@ -157,6 +158,8 @@ wire  [7:0] cpu_dout;
 wire        mreq_n, iorq_n, rd_n, wr_n, m1_n;
 reg   [7:0] cpu_din;
 wire        int_n;
+wire        sio_int_n, sio_ack_mine, sio_ieo, sio_sel;   // Z80 SIO (below)
+wire  [7:0] sio_vector, sio_dout;
 wire        wait_n;
 
 // T80 v350 (rtl/T80_v350, Sorgelig's MiSTer version). The sim gets T80s as a ghdl synth netlist with these
@@ -172,7 +175,7 @@ T80s #(.Mode(0), .T2Write(1), .IOWait(1)) cpu
 	.CEN(ce_cpu),
 	.OUT0(1'b0),
 	.WAIT_n(wait_n),
-	.INT_n(int_n),
+	.INT_n(int_n & sio_int_n),
 	.NMI_n(1'b1),
 	.BUSRQ_n(1'b1),
 	.M1_n(m1_n),
@@ -424,6 +427,29 @@ always @(posedge clk_sys) begin
 	end
 end
 
+// Daisy chain: PIO (no interrupts used) -> SIO -> interrupt block. RETI goes to the SIO first if it has a
+// channel in service.
+
+mz2500_sio sio
+(
+	.clk(clk_sys),
+	.reset(sys_reset),
+	.io_addr(port),
+	.din(cpu_dout),
+	.wr_stb(io_wr_end),
+	.rd_stb(io_rd_end),
+	.dout(sio_dout),
+	.sel(sio_sel),
+	.mouse_sel(opn_pa[3]),
+	.ps2_mouse(ps2_mouse),
+	.int_n(sio_int_n),
+	.ack_mine(sio_ack_mine),
+	.vector(sio_vector),
+	.ack_stb(inta_end),
+	.reti_stb(reti_stb),
+	.ieo(sio_ieo)
+);
+
 mz2500_int intc
 (
 	.clk(clk_sys),
@@ -432,9 +458,9 @@ mz2500_int intc
 	.a0(port[0]),
 	.din(cpu_dout),
 	.src({1'b0, 1'b0, pit_out[0], vblank_g}),
-	.iei(1'b1),
-	.ack_stb(inta_end),
-	.reti_stb(reti_stb),
+	.iei(sio_ieo),
+	.ack_stb(inta_end && !sio_ack_mine),
+	.reti_stb(reti_stb && sio_ieo),
 	.int_n(int_n),
 	.ack_mine(int_ack_mine),
 	.vector(int_vector)
@@ -675,7 +701,8 @@ end
 
 always @(*) begin
 	io_dout = 8'hFF;
-	case (port)
+	if (sio_sel) io_dout = sio_dout;
+	else case (port)
 		8'hB4: io_dout = {5'd0, bank};
 		8'hB5: io_dout = {2'd0, page[bank]};
 		8'hBC, 8'hBD, 8'hBE, 8'hBF, 8'hF4, 8'hF5, 8'hF6, 8'hF7: io_dout = vid_io_dout;
@@ -695,7 +722,7 @@ always @(*) begin
 end
 
 always @(*) begin
-	if (inta)        cpu_din = int_ack_mine ? int_vector : 8'hFF;
+	if (inta)        cpu_din = sio_ack_mine ? sio_vector : int_ack_mine ? int_vector : 8'hFF;
 	else if (~iorq_n) cpu_din = io_dout;
 	else             cpu_din = mem_dout;
 end

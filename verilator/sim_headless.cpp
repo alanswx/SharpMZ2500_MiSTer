@@ -62,6 +62,8 @@ struct Options {
     std::string save_file;
     std::string load_file;                // --load-state FILE
     uint64_t    dump_cycle = 0;           // --dump-at-cpu-cycle N: RAM dump + MMU pages (sim.v)
+    struct MouseEv { uint32_t frame; int dx, dy, buttons; };
+    std::vector<MouseEv> mouse;           // --mouse FRAME:DX:DY:BUTTONS
 };
 
 static void usage()
@@ -86,6 +88,7 @@ static void usage()
 "  --save-state N:FILE    save the machine state at the start of frame N; --load-state FILE resumes from it\n"
 "                         (give the same --fdd/--fdd-b images; frame numbers continue)\n"
 "  --dump-at-cpu-cycle N  write main RAM (SDRAM model) to out/ram_dump.hex and print the MMU pages at CPU cycle N\n"
+"  --mouse F:DX:DY:B      PS/2 mouse packet at frame F (DX right, DY up, B: 1 left, 2 right), repeatable\n"
 "  --wav FILE             record the audio output (48 kHz, 16-bit stereo WAV)\n"
 "  --ipl FILE, --kanji FILE   load IPL.ROM / KANJI.ROM separately (default: ../software/roms/extracted/...)\n"
 "fb_hash is FNV-1a 32 over the RGB888 bytes of the active picture.\n");
@@ -144,6 +147,13 @@ static bool parse_args(int argc, char **argv, Options &o)
             o.save_frame = parse_num(v.substr(0, c)); o.save_file = v.substr(c + 1);
         }
         else if (a == "--load-state") o.load_file = next();
+        else if (a == "--mouse") {
+            Options::MouseEv m{};
+            if (sscanf(next().c_str(), "%u:%d:%d:%d", &m.frame, &m.dx, &m.dy, &m.buttons) != 4) {
+                fprintf(stderr, "--mouse wants FRAME:DX:DY:BUTTONS\n"); return false;
+            }
+            o.mouse.push_back(m);
+        }
         else if (a == "--dump-at-cpu-cycle") o.dump_cycle = std::stoull(next(), nullptr, 0);
         else if (a == "--ipl") o.ipl_file = next();
         else if (a == "--kanji") o.kanji_file = next();
@@ -217,6 +227,7 @@ private:
     bool      open_fdd(int k);
     bool      opt_save_pending = false;
     bool      dump_done = false;
+    bool      mouse_tog = false;
     int       finish();
     void ioctl_load(uint32_t base, const std::vector<uint8_t> &data);
 };
@@ -476,6 +487,13 @@ void Sim::end_frame()
     fb.clear(); fb_h = 0; line.clear();
     frame++;
     if (!opt.save_file.empty() && frame == opt.save_frame) save_state();
+    for (auto &m : opt.mouse) if (m.frame == frame) {
+        // hps_io ps2_mouse: [24] toggle, [23:16] Y, [15:8] X, [7:0] Yovf Xovf Ysign Xsign 1 M R L
+        mouse_tog = !mouse_tog;
+        int dx = std::max(-255, std::min(255, m.dx)), dy = std::max(-255, std::min(255, m.dy));
+        uint32_t b0 = 0x08 | (m.buttons & 7) | ((dx < 0) << 4) | ((dy < 0) << 5);
+        top->ps2_mouse = ((uint32_t)mouse_tog << 24) | ((uint32_t)(dy & 0xFF) << 16) | ((uint32_t)(dx & 0xFF) << 8) | b0;
+    }
     auto range = ps2_schedule.equal_range(frame);
     for (auto it = range.first; it != range.second; ++it) ps2_queue.push_back(it->second);
 }
