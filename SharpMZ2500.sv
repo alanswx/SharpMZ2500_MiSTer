@@ -77,6 +77,8 @@ localparam CONF_STR =
 	"S1,D88,Drive 2;",
 	"-;",
 	"O[1],Lines (front switch),400 (24 kHz),200 (15 kHz);",
+	"-;",
+	"J1,Trigger A,Trigger B;",
 	"O[6:5],Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
 	"O[122:121],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"-;",
@@ -108,6 +110,7 @@ wire  [1:0] buttons;
 wire [127:0] status;
 wire [10:0] ps2_key;
 wire [31:0] joystick_0, joystick_1;
+wire [64:0] rtc;
 
 wire        ioctl_download;
 wire [15:0] ioctl_index;
@@ -144,6 +147,7 @@ hps_io #(.CONF_STR(CONF_STR), .VDNUM(2)) hps_io
 	.ps2_key(ps2_key),
 	.joystick_0(joystick_0),
 	.joystick_1(joystick_1),
+	.RTC(rtc),
 
 	.ioctl_download(ioctl_download),
 	.ioctl_index(ioctl_index),
@@ -206,6 +210,9 @@ mz2500 mz2500
 	.reset(reset),
 	.lines400(lines400),
 	.ps2_key(ps2_key),
+	.rtc(rtc),
+	.joy0(joystick_0[5:0]),
+	.joy1(joystick_1[5:0]),
 
 	.ioctl_download(ioctl_download && ioctl_index == 16'd0),
 	.ioctl_wr(ioctl_wr),

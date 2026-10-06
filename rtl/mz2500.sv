@@ -27,6 +27,9 @@ module mz2500
 	input         reset,
 	input         lines400,       // front-panel 200/400-line switch: 1 = 400 lines (24 kHz), 0 = 200 lines (15 kHz)
 	input  [10:0] ps2_key,
+	input  [64:0] rtc,            // hps_io RTC: BCD time and date, bit 64 toggles on an update
+	input   [5:0] joy0,           // MiSTer joysticks 1 and 2: right, left, down, up, trigger A, trigger B (active high)
+	input   [5:0] joy1,
 
 	// ROM download (hps_io ioctl): boot.rom = IPL at 000000, kanji ROM at 010000
 	input         ioctl_download,
@@ -305,7 +308,9 @@ always @(posedge clk_sys) begin
 end
 
 assign ioctl_wait = ram_wpend || ram_st != RAM_IDLE;
-wire   ram_wait    = mem_rd && ram_page && !ram_rdone;
+// The CPU waits for its SDRAM read, and on a write while the previous posted write hasn't been issued yet
+// (one-entry write buffer: a PUSH right behind a raster glyph fetch would otherwise overwrite the first byte).
+wire   ram_wait    = (mem_rd && ram_page && !ram_rdone) || (mem_wr && !cur_page[5] && ram_wpend);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Video
@@ -505,7 +510,22 @@ end
 
 reg  [7:0] pio_ctl_a, pio_ctl_b;
 
-wire [7:0] opn_port_b = {1'b0, ~lines400, 1'b1, 1'b1, 1'b0, 3'b111};   // CSP 37h (+40h for 200 lines)
+wire       rtc_pulse_n;
+wire [3:0] rtc_dout;
+// OPN port B: CSP 37h (+40h for 200 lines); bit 3 is the RTC pulse output
+wire [7:0] opn_port_b = {1'b0, ~lines400, 1'b1, 1'b1, rtc_pulse_n, 3'b111};
+
+rp5c15 #(.CLK_HZ(CLK_SYS_HZ)) rtc_chip
+(
+	.clk(clk_sys),
+	.reset(sys_reset),
+	.addr(cpu_a[11:8]),
+	.din(cpu_dout[3:0]),
+	.wr_stb(io_wr_end && port == 8'hCC),
+	.dout(rtc_dout),
+	.rtc(rtc),
+	.pulse_n(rtc_pulse_n)
+);
 
 always @(posedge clk_sys) begin
 	if (sys_reset) begin
@@ -613,6 +633,21 @@ wire signed [15:0] beep = ppi_pc[2] ? 16'sd4096 : 16'sd0;
 assign audio_l = opn_snd + beep;
 assign audio_r = opn_snd + beep;
 
+// Joystick port EF (CSP joystick.cpp). Write: bits 1-0 / 3-2 trigger outputs of port 1 / 2 (0 pulls the trigger
+// input low), bits 4 / 5 common pins (0 = read the directions), bit 6 selects port 2. Read: bits 3-0 right, left,
+// down, up and bit 5 / 4 trigger A / B of the selected port, active low; bits 7-6 = 0.
+reg  [7:0] joy_mode;
+always @(posedge clk_sys) begin
+	if (sys_reset) joy_mode <= 8'h0F;
+	else if (io_wr_end && port == 8'hEF) joy_mode <= cpu_dout;
+end
+wire [5:0] joy_sel = joy_mode[6] ? joy1 : joy0;
+wire       joy_dir = joy_mode[6] ? !joy_mode[5] : !joy_mode[4];
+wire       trg_a   = joy_mode[6] ? joy_mode[2] : joy_mode[0];
+wire       trg_b   = joy_mode[6] ? joy_mode[3] : joy_mode[1];
+wire [7:0] joy_rd  = {2'b00, ~(joy_sel[4] | ~trg_a), ~(joy_sel[5] | ~trg_b),
+                      ~(joy_dir & joy_sel[0]), ~(joy_dir & joy_sel[1]), ~(joy_dir & joy_sel[2]), ~(joy_dir & joy_sel[3])};
+
 mz2500_kbd kbd
 (
 	.clk(clk_sys),
@@ -652,7 +687,8 @@ always @(*) begin
 		8'hE4, 8'hE5, 8'hE6, 8'hE7: io_dout = pit_dout;
 		8'hE8: io_dout = pio_pa;
 		8'hEA: io_dout = kbd_data;
-		8'hEF: io_dout = 8'h3F;                                  // joysticks: nothing pressed
+		8'hEF: io_dout = joy_rd;
+		8'hCC: io_dout = {4'h0, rtc_dout};                       // RP5C15, register on A11-A8
 		8'hCA: io_dout = 8'h30;                                  // MZ-1E26 phone unit idle (FFh = 'powered from the phone')
 		default: io_dout = 8'hFF;
 	endcase

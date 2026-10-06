@@ -16,7 +16,7 @@
 //     graphics byte per plane (two in the 320-dot modes), two slots ahead of the dot being shown.
 //   * 200-line output shows CSP's even buffer lines (y400 = 2 * y).
 //
-// Not done yet: 256-colour graphics (1D/9D/19/99), 64-colour text, the MZ-2000
+// Not done yet: 64-colour text (40 columns), the MZ-2000
 // and MZ-80B display modes (text R0F MOD), scan-line options.
 //
 // Copyright (C) 2026 Alan Steremberg. GPL-3.0-or-later (see LICENSE).
@@ -56,9 +56,9 @@ module mz2500_video
 
 	// Kanji ROM raster port (the ROM is in SDRAM): kanji_req with kanji_addr/kanji_tag, answered by a one-clock
 	// kanji_ack with the same tag and kanji_data
-	output reg [17:0] kanji_addr,
-	output reg       kanji_req,
-	output reg [6:0] kanji_tag,
+	output    [17:0] kanji_addr,
+	output           kanji_req,
+	output     [6:0] kanji_tag,
 	input            kanji_ack,
 	input      [6:0] kanji_ack_tag,
 	input      [7:0] kanji_data,
@@ -105,8 +105,9 @@ wire m640_200 = gmode == 8'h17 || gmode == 8'h97;
 wire m320_16  = gmode == 8'h14 || gmode == 8'h15 || gmode == 8'h94 || gmode == 8'h95;
 wire m640_4   = gmode == 8'h03;
 wire m640_16  = gmode == 8'h93;
-wire m_on     = m640_200 | m320_16 | m640_4 | m640_16;
-wire m320     = m320_16;
+wire m256     = gmode == 8'h1D || gmode == 8'h9D || gmode == 8'h19 || gmode == 8'h99;   // 256 colours, 320 dots
+wire m_on     = m640_200 | m320_16 | m640_4 | m640_16 | m256;
+wire m320     = m320_16 | m256;
 wire gfx400   = m640_4 | m640_16 | gmode == 8'h19 | gmode == 8'h99;
 wire [14:0] gex = gmode[7] ? 15'h4000 : 15'h0000;
 wire pl1_front = gmode[0] == 1'b0;   // 14/94: screen 1 in front; 15/95: screen 0 in front
@@ -491,7 +492,7 @@ reg  [31:0] tres[0:1];            // 8 text values (4 bits each, pixel 0 = bits 
 // graphics fetch registers
 reg   [7:0] f_b0, f_r0, f_g0, f_i0;
 reg  [31:0] gres[0:1];            // 640-dot modes: 8 pixels per slot
-reg  [31:0] g320[0:1];            // 320-dot modes: 8 pixels per 16 dots
+reg  [63:0] g320[0:1];            // 320-dot modes: 8 pixels (8 bits each) per 16 dots
 
 reg         blink;
 reg  [25:0] blink_cnt;
@@ -546,24 +547,50 @@ function [31:0] gpix8(input [7:0] b, input [7:0] r, input [7:0] g, input [7:0] i
 	for (int n = 0; n < 8; n++) gpix8[n*4 +: 4] = {i[n] & m[3], g[n] & m[2], r[n] & m[1], b[n] & m[0]};
 endfunction
 
-function [31:0] merge2(input [31:0] front, input [31:0] back);
-	for (int n = 0; n < 8; n++) merge2[n*4 +: 4] = (front[n*4 +: 4] != 4'd0) ? front[n*4 +: 4] : back[n*4 +: 4];
+function [63:0] merge2(input [31:0] front, input [31:0] back);   // 16 colours: two screens, front wins
+	for (int n = 0; n < 8; n++) merge2[n*8 +: 8] = {4'd0, (front[n*4 +: 4] != 4'd0) ? front[n*4 +: 4] : back[n*4 +: 4]};
 endfunction
+function [63:0] join256(input [31:0] hi, input [31:0] lo);           // 256 colours: screen 1 = high nibble
+	for (int n = 0; n < 8; n++) join256[n*8 +: 8] = {hi[n*4 +: 4], lo[n*4 +: 4]};
+endfunction
+function [63:0] widen(input [31:0] p);
+	for (int n = 0; n < 8; n++) widen[n*8 +: 8] = {4'd0, p[n*4 +: 4]};
+endfunction
+
+// 256-colour plane enables: R18 (bits 3-0 screen 1 = high nibble, bits 7-4 screen 0 = low nibble) gated by F6
+wire [7:0] mask256 = cgreg[24] & {cg_mask[0], cg_mask[2], cg_mask[1], cg_mask[0], cg_mask[0], cg_mask[2], cg_mask[1], cg_mask[0]};
 
 wire [10:0] cell_addr = column80 ? (t_base + {4'd0, f_slot}) :
                         (t_base + {5'd0, f_slot[6:1]} + (f_slot[0] ? 11'h400 : 11'h000));
 
-reg [7:0] f_kanji;          // glyph byte from the kanji ROM for this slot
+// Kanji glyph requests: a queue of two (one per slot parity) with the cell's context, so a cell whose glyph byte
+// comes late from SDRAM is still finished when it arrives, while the next cell's fetch goes on. A request has the
+// two cells of lead time the fetch slots give (16 dots); one not answered by then is replaced.
+reg  [1:0] kq_v;
+reg  [1:0] kq_old;           // kq_old[p]: entry p is the older pending one
+reg [17:0] kq_a[0:1];
+reg  [6:0] kq_t[0:1];
+reg  [7:0] kc_attr[0:1], kc_t2[0:1];
+reg  [1:0] kc_ok;
+reg        f_needk;
+wire       kq_h = (kq_v[0] && kq_v[1]) ? kq_old[1] : kq_v[1];   // head: the older valid entry
+assign kanji_req  = |kq_v;
+assign kanji_addr = kq_a[kq_h];
+assign kanji_tag  = kq_t[kq_h];
+wire       kq_hit0 = kq_v[0] && kanji_ack && kanji_ack_tag == kq_t[0];
+wire       kq_hit1 = kq_v[1] && kanji_ack && kanji_ack_tag == kq_t[1];
+wire       kq_hit  = kq_hit0 | kq_hit1;
+wire       kq_x    = kq_hit1;
 
 always @(posedge clk) begin
 	g_adv <= 1'b0;
-	if (kanji_req && kanji_ack && kanji_ack_tag == kanji_tag) begin
-		f_kanji   <= kanji_data;
-		kanji_req <= 1'b0;
+	if (kq_hit) begin
+		kq_v[kq_x] <= 1'b0;
+		tres[kq_t[kq_x][0]] <= text_cell(kc_attr[kq_x], kc_t2[kq_x], kanji_data, 8'd0, 8'd0, 8'd0, 8'd0, kc_ok[kq_x]);
 	end
 	if (reset) begin
 		f_run <= 1'b0;
-		kanji_req <= 1'b0;
+		kq_v <= 2'b00;
 	end
 	else if (slot_start) begin
 		f_run  <= (slot < 7'd80);
@@ -584,26 +611,37 @@ always @(posedge clk) begin
 			end
 			4'd2: begin
 				f_t1 <= tv_b_dout[0]; f_attr <= tv_b_dout[1]; f_t2 <= tv_b_dout[2];
-				kanji_addr <= {tv_b_dout[2][6], 17'd0} + (font8 ? {tv_b_dout[2][5:0], tv_b_dout[0], 3'b000} :
-				                                                  {tv_b_dout[2][5:0], tv_b_dout[0][7:1], 4'b0000})
-				              + {14'd0, t_gl};
 				pcg_b_addr <= font8 ? {tv_b_dout[0], t_gl[2:0]} : {tv_b_dout[0][7:1], t_gl};
-				// the glyph comes from the kanji ROM (SDRAM): request it; step 3 waits for the answer
-				kanji_req <= tv_b_dout[2][7] && tv_b_dout[1][5:3] == 3'b000 && t_rowok;
-				kanji_tag <= f_slot;
-				f_kanji   <= 8'h00;
+				// the glyph comes from the kanji ROM (SDRAM): queue a request, the cell is finished when it is answered
+				f_needk <= tv_b_dout[2][7] && tv_b_dout[1][5:3] == 3'b000 && t_rowok;
+				if (tv_b_dout[2][7] && tv_b_dout[1][5:3] == 3'b000 && t_rowok) begin
+					kq_v[f_slot[0]] <= 1'b1;
+					kq_a[f_slot[0]] <= {tv_b_dout[2][6], 17'd0} + (font8 ? {tv_b_dout[2][5:0], tv_b_dout[0], 3'b000} :
+					                                                       {tv_b_dout[2][5:0], tv_b_dout[0][7:1], 4'b0000})
+					                   + {14'd0, t_gl};
+					kq_t[f_slot[0]] <= f_slot;
+					kq_old[f_slot[0]] <= 1'b0;
+					kq_old[~f_slot[0]] <= kq_v[~f_slot[0]] && !(kq_hit && kq_x == ~f_slot[0]);
+					kc_attr[f_slot[0]] <= tv_b_dout[1];
+					kc_t2[f_slot[0]] <= tv_b_dout[2];
+					kc_ok[f_slot[0]] <= t_rowok;
+				end
 				f_b0 <= gv_b_dout[0]; f_r0 <= gv_b_dout[1]; f_g0 <= gv_b_dout[2]; f_i0 <= gv_b_dout[3];
 				gv_b_addr <= (g_chain_prev ^ 15'h2000) | gex;   // second screen of the 320-dot modes
 			end
-			4'd3: if (kanji_req && !(kanji_ack && kanji_ack_tag == kanji_tag)) f_step <= 4'd3;
 			4'd4: begin
-				tres[f_slot[0]] <= text_cell(f_attr, f_t2, f_kanji, pcg_b_dout[0], pcg_b_dout[1], pcg_b_dout[2],
-				                             pcg_b_dout[3], t_rowok);
+				if (!f_needk)
+					tres[f_slot[0]] <= text_cell(f_attr, f_t2, 8'd0, pcg_b_dout[0], pcg_b_dout[1], pcg_b_dout[2],
+					                             pcg_b_dout[3], t_rowok);
 				if (m640_200 || m640_16)
 					gres[f_slot[0]] <= gpix8(f_b0, f_r0, f_g0, f_i0, cgreg[24][3:0]);
 				else if (m640_4)
 					gres[f_slot[0]] <= gpix8(g_hi_prev ? f_g0 : f_b0, g_hi_prev ? f_i0 : f_r0, 8'd0, 8'd0,
 					                         {2'b00, cgreg[24][1:0]});
+				else if (m256 && !f_slot[0])
+					// pixel = B0 R0 G0 I0 (screen at addr ^ 2000h) | B1 R1 G1 I1 << 4 (screen at addr), CSP draw_320x200x256screen
+					g320[f_slot[1]] <= join256(gpix8(f_b0, f_r0, f_g0, f_i0, mask256[3:0]),
+					                           gpix8(gv_b_dout[0], gv_b_dout[1], gv_b_dout[2], gv_b_dout[3], mask256[7:4]));
 				else if (m320 && !f_slot[0]) begin
 					if (pl1_front)
 						g320[f_slot[1]] <= merge2(gpix8(gv_b_dout[0], gv_b_dout[1], gv_b_dout[2], gv_b_dout[3], cgreg[24][7:4]),
@@ -628,7 +666,7 @@ always @(posedge clk) if (f_run && f_step == 4'd0) begin g_chain_prev <= g_chain
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 reg  [31:0] tcur1, tcur2;     // text values: 80 columns (tcur1) or 40-column screens 1 and 2
-reg  [31:0] gcur, gprev, gprev2;
+reg  [63:0] gcur, gprev, gprev2;   // 8 dots, 8 bits each (16-colour modes use the low nibble)
 
 // text window (CSP draw_text), in buffer lines and 8-dot columns
 wire signed [9:0] SLr = lines400 ? ($signed({2'b0, textreg[3]}) - 10'sd17) : ($signed({2'b0, textreg[3]}) - 10'sd38);
@@ -659,26 +697,33 @@ wire [2:0] tx80 = x[2:0];
 wire [2:0] tx40 = x[3:1];
 wire [3:0] tv1 = column80 ? tcur1[tx80*4 +: 4] : tcur1[tx40*4 +: 4];
 wire [3:0] tv2 = tcur2[tx40*4 +: 4];
+// 40 columns, R00 CP = 00: 64-colour text, screen 1 gives the high bit of each component, screen 2 the middle bit
+// (t64 = s1 GRB : s2 GRB); transparent only where both are, non-transparent black where both are black (CSP).
+// It only has its own colours in 256-colour graphics mode; elsewhere it shows like the overlay.
+wire       text64 = !column80 && textreg[0][3:2] == 2'b00;
 reg  [3:0] tval;
+reg  [5:0] t64;
 always @(*) begin
+	t64 = {tv1[2:0], tv2[2:0]};
 	if (column80) tval = tv1;
 	else case (textreg[0][3:2])
 		2'b01: tval = tv1;
 		2'b10: tval = tv2;
 		default: tval = (tv1[2:0] != 3'd0) ? tv1 : (tv2[2:0] != 3'd0) ? tv2 : (tv1 & 4'd8) | (tv2 & 4'd8);
 	endcase
-	if (!(t_vin && t_hin)) tval = trans;
+	if (text64) tval = (t64 != 6'd0) ? ((tv1[2:0] != 3'd0) ? tv1 : tv2) : (tv1[3] && tv2[3]) ? 4'd8 : 4'd0;
+	if (!(t_vin && t_hin)) begin tval = trans; t64 = 6'd0; end
 end
 
 // current graphics pixel, with the horizontal scroll (dots inserted at the left)
 wire [3:0] hd = g_hsc ? (m320 ? {HDSC, 1'b0} : {1'b0, HDSC}) : 4'd0;
 wire signed [5:0] gidx = $signed({3'b0, x[2:0]}) - $signed({2'b0, hd});
-reg  [3:0] gval;
+reg  [7:0] gval;
 always @(*) begin
-	if (gidx >= 0)       gval = gcur[gidx[2:0]*4 +: 4];
-	else if (gidx >= -8) gval = gprev[gidx[2:0]*4 +: 4];
-	else                 gval = gprev2[gidx[2:0]*4 +: 4];
-	if (!m_on) gval = 4'd0;
+	if (gidx >= 0)       gval = gcur[gidx[2:0]*8 +: 8];
+	else if (gidx >= -8) gval = gprev[gidx[2:0]*8 +: 8];
+	else                 gval = gprev2[gidx[2:0]*8 +: 8];
+	if (!m_on) gval = 8'd0;
 end
 
 // 16-colour palette (CSP analogue monitor) and text colours
@@ -698,11 +743,13 @@ wire [3:0] back16 = {textreg[11][0], textreg[12][0], textreg[11][5], textreg[11]
 // Two-stage pixel pipeline: at ce_pix the text value, graphics value and window flags of the dot are registered
 // (p_*); one clock later the palette and priority give R, G, B. A dot lasts at least 2 clocks (4 at 85.9 MHz),
 // so the output is stable when the next ce_pix samples it. Blanking and syncs take the same two steps.
-reg  [3:0] p_tval, p_gval;
+reg  [3:0] p_tval;
+reg  [5:0] p_t64;
+reg  [7:0] p_gval;
 reg        p_gin, p_act, p_hb, p_vb, p_hs, p_vs;
 reg        ce_pix_d;
 
-wire [3:0] pg     = palreg[p_gval][3:0];
+wire [3:0] pg     = palreg[p_gval[3:0]][3:0];
 wire [23:0] gcolor16 = pal16((pg != 4'd0) ? (pg & cg_mask) : (back16 & cg_mask));
 
 // 4096-colour board (CSP palette4096tmp): every colour goes through a palette register, text colour t (1-7)
@@ -713,7 +760,7 @@ endfunction
 function [23:0] c4096(input [3:0] i);
 	c4096 = {p4r[i], 4'h0, p4g[i], 4'h0, p4b[i], 4'h0};
 endfunction
-wire [23:0] gcolor = pal4096 ? c4096(gmap(p_gval)) : gcolor16;
+wire [23:0] gcolor = pal4096 ? c4096(gmap(p_gval[3:0])) : gcolor16;
 wire [23:0] tcolor = pal4096 ? c4096(gmap({1'b1, p_tval[2:0]})) : digital(p_tval[2:0]);
 wire [23:0] bcolor = pal4096 ? c4096(palreg[back16][3:0]) : pal16(palreg[back16][3:0]);
 wire [23:0] kcolor = pal4096 ? c4096(gmap(4'd0)) : 24'd0;     // non-transparent black inside the window
@@ -727,12 +774,51 @@ initial begin
 end
 `endif
 
+// 256 colours (CSP palette256 / priority256): the palette register of the high nibble remaps it and gives the
+// priority; colour index 0 is the background colour R0B/R0C; each component is 3 bits (two pixel bits and a low
+// bit chosen by text R0A), replicated to 8. Text uses the 8 digital colours if R00 bit 0 = 1, otherwise dimmed
+// colours (screen 1 only, 146 instead of 255); outside the window transparent text is then black.
+function [0:0] low256(input [1:0] sel, input [7:0] i);
+	low256 = (sel == 2'd0) ? i[7] : (sel == 2'd1) ? i[3] : (sel == 2'd2) ? 1'b1 : 1'b0;
+endfunction
+function [7:0] rep3(input [2:0] v);
+	rep3 = {v, v, v[2:1]};
+endfunction
+function [23:0] pal256(input [7:0] i);
+	pal256 = {rep3({i[5], i[1], low256(textreg[10][3:2], i)}),
+	          rep3({i[6], i[2], low256(textreg[10][5:4], i)}),
+	          rep3({i[4], i[0], low256(textreg[10][1:0], i)})};
+endfunction
+wire [23:0] back256  = {textreg[11][5:3], 5'd0, textreg[12][0], textreg[11][7:6], 5'd0, textreg[11][2:0], 5'd0};
+wire  [7:0] cgm256   = {palreg[p_gval[7:4]][3:0], p_gval[3:0]};
+wire        pri256   = palreg[p_gval[7:4]][4];
+wire [23:0] gcol256  = (cgm256 == 8'd0) ? back256 : pal256(cgm256);
+// the 64-colour text and the dimmed 8 colours use CSP's fixed initial 256-colour table (low bit = index bit 7 = 0)
+function [23:0] pal256i(input [7:0] i);
+	pal256i = {rep3({i[5], i[1], i[7]}), rep3({i[6], i[2], i[7]}), rep3({i[4], i[0], i[7]})};
+endfunction
+wire [23:0] tcol256  = text64 ? pal256i({1'b0, p_t64[5:3], 1'b0, p_t64[2:0]}) :
+                       textreg[0][0] ? digital(p_tval[2:0]) :
+                       {p_tval[1] ? 8'd146 : 8'd0, p_tval[2] ? 8'd146 : 8'd0, p_tval[0] ? 8'd146 : 8'd0};
+
 reg [23:0] rgb;
 always @(*) begin
-	if (dbg_notext) rgb = p_gin ? gcolor : bcolor;
+	if (m256 && !dbg_notext && !dbg_nogfx) begin
+		if (p_gin) begin
+			if (p_tval == 4'd0 || pri256) rgb = gcol256;
+			else if (p_tval == 4'd8)      rgb = 24'd0;
+			else                          rgb = tcol256;
+		end
+		else begin
+			if (p_tval == 4'd0)      rgb = textreg[0][0] ? back256 : 24'd0;
+			else if (p_tval == 4'd8) rgb = 24'd0;
+			else                     rgb = tcol256;
+		end
+	end
+	else if (dbg_notext) rgb = p_gin ? gcolor : bcolor;
 	else if (dbg_nogfx) rgb = (p_tval == 4'd0 || p_tval == 4'd8) ? 24'd0 : digital(p_tval[2:0]);
 	else if (p_gin) begin
-		if (p_tval == 4'd0 || palreg[p_gval][4]) rgb = gcolor;
+		if (p_tval == 4'd0 || palreg[p_gval[3:0]][4]) rgb = gcolor;
 		else if (p_tval == 4'd8)                 rgb = kcolor;
 		else                                     rgb = tcolor;
 	end
@@ -752,14 +838,14 @@ always @(posedge clk) begin
 		if (y_act && x[2:0] == 3'd7 && x >= -1 && x < 639) begin
 			if (column80) tcur1 <= tres[slot_next[0]];
 			else if (x[3] == 1'b1 || x == -1) begin tcur1 <= tres[0]; tcur2 <= tres[1]; end
-			gprev2 <= (x == -1) ? 32'd0 : gprev;
-			gprev  <= (x == -1) ? 32'd0 : gcur;
+			gprev2 <= (x == -1) ? 64'd0 : gprev;
+			gprev  <= (x == -1) ? 64'd0 : gcur;
 			if (m320) gcur <= expand320(g320[slot_next[1]], slot_next[0]);
-			else      gcur <= gres[slot_next[0]];
+			else      gcur <= widen(gres[slot_next[0]]);
 		end
 
 		// stage 1
-		p_tval <= tval; p_gval <= gval; p_gin <= g_in; p_act <= act;
+		p_tval <= tval; p_t64 <= t64; p_gval <= gval; p_gin <= g_in; p_act <= act;
 		p_hb <= !(x >= 0 && x < 640);
 		p_vb <= !y_act;
 		p_hs <= lines400 ? (hc >= 10'd736 && hc < 10'd800) : (hc >= 10'd768 && hc < 10'd832);
@@ -775,8 +861,8 @@ end
 
 
 // 320-dot modes: half h (0 = pixels 0-3, 1 = pixels 4-7) of an 8-pixel group, each pixel doubled
-function [31:0] expand320(input [31:0] p, input h);
-	for (int n = 0; n < 8; n++) expand320[n*4 +: 4] = p[(h*4 + n/2)*4 +: 4];
+function [63:0] expand320(input [63:0] p, input h);
+	for (int n = 0; n < 8; n++) expand320[n*8 +: 8] = p[(h*4 + n/2)*8 +: 8];
 endfunction
 
 endmodule

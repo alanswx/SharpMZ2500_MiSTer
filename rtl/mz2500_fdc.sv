@@ -86,7 +86,9 @@ generate
 		wire selected = (drive == d);
 		wire io_en = chip & (selected | (io_wr & reg_a != 2'd0));
 
-		wd1793 #(.RWMODE(1), .EDSK(1)) fdc
+		// WDT: 2 MFM byte times (64 us) at the 6 MHz ce: the IPL skips a sector by issuing READ SECTOR and only
+		// waiting for BUSY to drop, which takes ~8 ms on a real drive
+		wd1793 #(.RWMODE(1), .EDSK(1), .WDT(384)) fdc
 		(
 			.clk_sys(clk_sys),
 			.ce(ce_cpu | fdc_prepare[d]),

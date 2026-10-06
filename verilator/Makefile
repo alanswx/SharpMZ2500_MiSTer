@@ -42,7 +42,7 @@ VHD_SRC = $(T80_SRC)
 GEN_V = $(GEN)/t80s.v
 
 SV_SRC = sim.v sdram_model.sv $(RTL)/mz2500.sv $(RTL)/mz2500_video.sv $(RTL)/mz2500_int.sv $(RTL)/mz2500_kbd.sv \
-	$(RTL)/mz_pit8253.sv $(RTL)/dpram.sv $(RTL)/mz2500_fdc.sv $(RTL)/wd1793.sv $(RTL)/wd1793_mem.v
+	$(RTL)/mz_pit8253.sv $(RTL)/dpram.sv $(RTL)/mz2500_fdc.sv $(RTL)/rp5c15.sv $(RTL)/wd1793.sv $(RTL)/wd1793_mem.v
 JT12_SRC = $(wildcard $(RTL)/jt12/*.v) $(wildcard $(RTL)/jt12/jt49/*.v)
 V_SRC  = $(SV_SRC) $(JT12_SRC) $(GEN_V)
 
@@ -50,6 +50,9 @@ V_OPT = -O3 --x-assign fast --x-initial fast --noassert --savable \
 	-Wno-fatal -Wno-PINMISSING -Wno-WIDTH -Wno-UNOPTFLAT -Wno-CASEINCOMPLETE \
 	-Wno-UNSIGNED -Wno-CMPCONST -Wno-DECLFILENAME -Wno-MULTIDRIVEN -Wno-LATCH \
 	-Wno-TIMESCALEMOD -Wno-COMBDLY
+
+# EXTRA: more Verilator options, e.g. make fast FAST_DIR=obj_dir_dbg EXTRA=-DDEBUG_FDC_READ
+V_OPT += $(EXTRA)
 
 CXXFLAGS = -O3 -std=c++17
 HL_DIR   = obj_dir_headless

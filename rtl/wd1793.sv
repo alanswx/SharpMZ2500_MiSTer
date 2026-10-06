@@ -22,7 +22,7 @@
 //
 //============================================================================
 
-module wd1793 #(parameter RWMODE=0, EDSK=1)
+module wd1793 #(parameter RWMODE=0, EDSK=1, WDT=4096)
 (
 	input        clk_sys,     // sys clock
 	input        ce,          // ce at CPU clock rate
@@ -336,13 +336,15 @@ end
 wire  [7:0] next_track  = (din[6] ? din[5] : step_direction) ? disk_track - 1'd1 : disk_track + 1'd1;
 wire [10:0]	next_length = data_length - 1'b1;
 
-// Watchdog
+// Watchdog: ce cycles the CPU has to take each byte before LOST DATA and the next byte. A real controller
+// clocks a byte every 32 us (MFM) whether the CPU reads it or not, so a sector it doesn't read still ends in
+// about 8 ms. LOCAL CHANGE (SharpMZ2500): WDT parameter (was a fixed 4096), the MZ-2500 uses 2 byte times.
 reg         watchdog_set;
 wire        watchdog_bark = (wd_timer == 0);
 reg  [15:0] wd_timer;
 always @(posedge clk_sys) begin
 	if(ce) begin
-		if(watchdog_set) wd_timer <= 4096;
+		if(watchdog_set) wd_timer <= WDT[15:0];
 			else if(wd_timer != 0) wd_timer <= wd_timer - 1'b1;
 	end
 end

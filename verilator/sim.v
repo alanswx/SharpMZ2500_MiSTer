@@ -77,6 +77,9 @@ mz2500 mz2500
    .reset(reset),
    .lines400(lines400),
    .ps2_key(ps2_key),
+   .joy0(6'd0), .joy1(6'd0),
+   // fixed RTC so runs are reproducible: 1990-04-01 (Sunday) 12:00:00
+   .rtc({1'b0, 8'h00, 8'h00, 8'h90, 8'h04, 8'h01, 8'h12, 8'h00, 8'h00}),
 
    .ioctl_download(ioctl_download),
    .ioctl_wr(ioctl_wr),
@@ -106,6 +109,20 @@ mz2500 mz2500
    .dbg_io_port(dbg_io_port),
    .dbg_io_data(dbg_io_data)
 );
+
+// +fdctrace: print FDC register reads (value as the CPU sees it, inverted bus) when it changes
+reg fdctrace = 0;
+reg [7:0] fdc_last = 0;
+initial fdctrace = $test$plusargs("fdctrace");
+always @(posedge clk_sys) if (fdctrace && mz2500.io_rd_end && mz2500.port[7:2] == 6'b110110) begin
+   if (mz2500.io_dout != fdc_last || mz2500.port[1:0] != 2'd0)
+      $display("[fdc] %0d rd %02x = %02x (status %02x)", cpu_cyc, mz2500.port, mz2500.io_dout, ~mz2500.io_dout);
+   fdc_last <= mz2500.io_dout;
+end
+always @(posedge clk_sys) if (fdctrace && mz2500.ce_cpu && mz2500.io_rd && mz2500.port == 8'hD8 && cpu_cyc > 22007000 && cpu_cyc < 22009000)
+   $display("[fdc] %0d  ce in-cycle D8 din %02x wait_n %0d", cpu_cyc, mz2500.cpu_din, mz2500.wait_n);
+always @(posedge clk_sys) if (fdctrace && mz2500.io_wr_end && mz2500.port[7:2] == 6'b110110)
+   $display("[fdc] %0d wr %02x = %02x (%02x)", cpu_cyc, mz2500.port, mz2500.cpu_dout, ~mz2500.cpu_dout);
 
 // +inttrace: print interrupt acknowledges and RETIs
 reg inttrace = 0;
