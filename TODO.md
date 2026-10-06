@@ -72,7 +72,7 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 
 - [ ] All MMU pages: main RAM 00-1F (256 KB), graphics VRAM 20-2F, VRAM read-modify-write window 30-33 (CSP layout:
       32 KB per plane), IPL 34-37, text VRAM 38, kanji/PCG 39, dictionary 3A (bank port CE), phone ROM 3C-3F
-- [ ] Special reset vs IPL reset maps; mode register B7 for the MZ-80B/2000 layouts
+- [x] Special reset vs IPL reset maps; mode register B7 for the MZ-80B/2000 layouts
 - [ ] Memory test program (assembled in `verilator/tests/`, loaded through a debug load path like SharpMZ's
       `direct_start`)
 
@@ -135,10 +135,14 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 
 ## Phase 10: MZ-80B / MZ-2000 compatibility mode
 
-- [ ] Boot mode switch in the OSD (OPN port B), 4 MHz CPU, MMU 80B/2000 maps, CRTC 2000/80B drawing (use
-      SharpMZ_MiSTer `rtl/mz80b/mz80b.vhd` as the reference for the decode and display rules)
-- [ ] Data recorder: copy `cmt.vhd`, `tape_image.sv`, `tape_ddr.sv`; APSS; MZT images in an S slot
-- [ ] Tests: MZ-2000 tapes load through the 2500 IPL (SharpMZ's `software/mz2200` titles)
+- [x] Boot mode switch in the OSD (OPN port B), 4 MHz CPU, VRAM windows (PIO port A bits 7-6, F7 / F4-F7 page),
+      CRTC MOD 1/2 registers and the 2000/80B drawing (CSP memory.cpp, crtc.cpp draw_screen_2000/80b)
+- [x] Data recorder (`rtl/mz2500_cmt.sv`, CSP cmt.cpp/datarec.cpp): MZT image in SDRAM from the OSD (F1), MZ-2500 and
+      MZ-80B/2000 MZT encodings, REW/FF/PLAY/STOP edges in CSP's order (the 2000 IPL writes 10h to stop), APSS
+- [x] MZ-1Z001 BASIC loads through the 2000-mode IPL: "Ready" pixel-identical to BubiZ
+- [ ] MZ-80B mode: an 80B tape (green display, 320x200 graphics) checked against BubiZ
+- [ ] More MZ-2000 tapes (SharpMZ's `software/mz2200` titles; Puckn Boy after MZ-1Z002 from one multi-record MZT)
+- [ ] Tape recording (MIC, PC7), the SharpMZ_MiSTer image-append approach
 
 ## Phase 11: SDRAM
 

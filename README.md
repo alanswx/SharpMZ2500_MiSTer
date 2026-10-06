@@ -29,8 +29,14 @@ and the kanji ROM in SDRAM (the text raster fetches glyphs two cells ahead), ROM
 graphics VRAM (16- and 256-colour modes, RMW window, clear, scroll, palette and priority, the 4096-colour board,
 64-colour text); the interrupt block, 8253, 8255, Z80 PIO and keyboard; the MB8876 floppy controller with two D88
 drives (wd1793.sv); the YM2203 (jotego jt03) and the beeper; the RP5C15 clock (from MiSTer's RTC); the joystick
-port; a minimal Z80 SIO with the mouse on channel B. Not yet: tape, RS-232C, drives 3-4, the MZ-80B/2000 modes:
-see [TODO.md](TODO.md).
+port; a minimal Z80 SIO with the mouse on channel B; the data recorder (MZT images from the OSD, held in SDRAM, with
+the MZ-2500 and the MZ-80B/2000 tape formats and APSS); the MZ-2000 / MZ-80B compatibility mode (boot mode in the
+OSD, 4 MHz CPU, the VRAM windows of PIO port A, the 2000/80B text and graphics display). Not yet: tape recording,
+RS-232C, drives 3-4: see [TODO.md](TODO.md).
+
+MZ-2000 mode: set Boot mode to MZ-2000, load an MZT (e.g. MZ-1Z001 BASIC), reset and press C at the IPL menu. In the
+sim (`--boot-mode 2000 --tape MZ-1Z001.mzt --type 600:c`) BASIC comes up "Ready" by frame 13500, pixel-identical to
+BubiZ-2500 `-mz2000`.
 
 ROMs: build `boot.rom` from your dumps with `tools/make_bootrom.sh IPL.ROM KANJI.ROM boot.rom` (CRCs in
 docs/roms.md) and put it in `games/SharpMZ2500/` on the SD card; the sim reads `software/roms/extracted/` by default

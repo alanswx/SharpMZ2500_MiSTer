@@ -53,6 +53,10 @@ module mz2500_video
 	input            column80,        // Z80 PIO port A bit 5
 	input            screen_mask,     // 8255 port C bit 0 (VGATE): black screen
 	input            pal4096,         // OPN port A bit 2 = 0: output through the 4096-colour board (AE)
+	input      [1:0] boot_mode,       // 0 MZ-2500, 1 MZ-2000, 2 MZ-80B (front-panel switch, latched at reset)
+	input            vid_n,           // 8255 port A bit 4 (VID): 0 = reverse (MZ-2000/80B screens)
+	input      [2:0] vram_page,       // MZ-2000/80B VRAM page register (mz2500.sv)
+	output     [1:0] disp_mod,        // text R0F bits 1-0 (MOD): 1 = MZ-2000 display, 2 = MZ-80B
 
 	// Kanji ROM raster port (the ROM is in SDRAM): kanji_req with kanji_addr/kanji_tag, answered by a one-clock
 	// kanji_ack with the same tag and kanji_data
@@ -85,6 +89,9 @@ reg  [7:0] cgreg_num;
 reg  [3:0] cg_mask;
 reg        font8;              // F7 bit 0: 8-line font
 reg        clear_flag;
+reg  [2:0] back_color;         // MZ-2000 display: F4
+reg  [7:0] text_color;         // F5: bits 2-0 colour, bit 3 = graphics in front
+reg  [2:0] vram_mask;          // F6: graphics planes shown
 reg  [3:0] p4r[0:15], p4g[0:15], p4b[0:15];   // 4096-colour palette (port AE), 4 bits per component
 
 wire [8:0] GDEVS = {cgreg[9][0],  cgreg[8]};
@@ -294,6 +301,7 @@ always @(posedge clk) begin
 		cgreg_num <= 8'h80;
 		textreg_num <= 8'd0;
 		cg_mask <= 4'hF;
+		back_color <= 3'd0; text_color <= 8'd7; vram_mask <= 3'd0;
 		for (int n = 0; n < 16; n++) begin
 			p4r[n] <= (n == 8) ? 4'h9 : ((n & 4'hA) == 4'hA) ? 4'hF : ((n & 4'hA) == 4'h2) ? 4'h7 : 4'h0;
 			p4g[n] <= (n == 8) ? 4'h9 : ((n & 4'hC) == 4'hC) ? 4'hF : ((n & 4'hC) == 4'h4) ? 4'h7 : 4'h0;
@@ -339,8 +347,10 @@ always @(posedge clk) begin
 					endcase
 					if (cgreg_num[7]) cgreg_num <= {cgreg_num[7:2], cgreg_num[1:0] + 2'd1};
 				end
-				8'hF4: textreg_num <= io_din;
-				8'hF5: begin
+				8'hF4: if (textreg[15][1:0] == 2'd1) back_color <= io_din[2:0];
+				       else if (textreg[15][1:0] != 2'd2) textreg_num <= io_din;
+				8'hF5: if (textreg[15][1:0] == 2'd1) text_color <= io_din;
+				       else if (textreg[15][1:0] != 2'd2) begin
 					if (textreg_num < 8'h10) begin
 						if (textreg_num == 8'h0F && textreg[15][1:0] != 2'd0)
 							textreg[15] <= {io_din[7:2], textreg[15][1:0]};
@@ -349,8 +359,9 @@ always @(posedge clk) begin
 					end
 					else if (textreg_num[7:4] == 4'h8) palreg[textreg_num[3:0]] <= io_din[4:0];
 				end
-				8'hF6: cg_mask <= {io_din[0], io_din[2:0]};
-				8'hF7: font8 <= io_din[0];
+				8'hF6: if (textreg[15][1:0] == 2'd1) vram_mask <= io_din[2:0];
+				       else if (textreg[15][1:0] != 2'd2) cg_mask <= {io_din[0], io_din[2:0]};
+				8'hF7: if (textreg[15][1:0] == 2'd0 || textreg[15][1:0] == 2'd3) font8 <= io_din[0];
 				// 16-bit port: A12-A9 = palette number, A8 = 1 for G (D3-0), 0 for R (D7-4) and B (D3-0)
 				8'hAE: if (io_hi[0]) p4g[io_hi[4:1]] <= io_din[3:0];
 				       else begin p4r[io_hi[4:1]] <= io_din[7:4]; p4b[io_hi[4:1]] <= io_din[3:0]; end
@@ -443,6 +454,7 @@ wire         [5:0] row = rows20 ? ys205[17:12] : ys[9:4];
 wire        [10:0] rowoff = column80 ? ({row, 6'd0} + {row, 4'd0}) : ({row, 5'd0} + {row, 3'd0});
 
 reg  [14:0] g_chain, g_line_start;
+reg  [14:0] c_gbase;              // MZ-2000/80B: graphics address of the line
 reg         g_adv;               // advance the chain (one graphics byte fetched)
 reg  [14:0] g_chain_prev;        // chain value of the current fetch slot
 reg         g_hi_prev;
@@ -456,9 +468,17 @@ wire  [8:0] li20 = ys[8:0] - ({3'd0, row} << 4) - ({3'd0, row} << 2);
 
 always @(posedge clk) begin
 	if (ce_pix && hc == 10'd1 && y_act) begin
-		t_rowok <= (ys >= 0) && (rows20 ? (li20 < 9'd16) : 1'b1);
-		t_gl    <= font8 ? {1'b0, (rows20 ? li20[3:1] : ys[3:1])} : (rows20 ? li20[3:0] : ys[3:0]);
-		t_base  <= tsa + rowoff;
+		if (compat) begin
+			t_rowok <= 1'b1;
+			t_gl    <= {1'b0, yb[3:1]};                                        // y200 & 7
+			t_base  <= column80 ? ({yb[8:4], 6'd0} + {yb[8:4], 4'd0}) : ({yb[8:4], 5'd0} + {yb[8:4], 3'd0});   // row * 80 / 40
+			c_gbase <= compat80b ? ({yb[8:1], 5'd0} + {yb[8:1], 3'd0}) : ({yb[8:1], 6'd0} + {yb[8:1], 4'd0}); // y200 * 40 / 80
+		end
+		else begin
+			t_rowok <= (ys >= 0) && (rows20 ? (li20 < 9'd16) : 1'b1);
+			t_gl    <= font8 ? {1'b0, (rows20 ? li20[3:1] : ys[3:1])} : (rows20 ? li20[3:0] : ys[3:0]);
+			t_base  <= tsa + rowoff;
+		end
 
 		if (yo == 0) begin
 			g_chain      <= (SLN1 == 9'd0) ? SAD2 : SAD0;
@@ -470,7 +490,7 @@ always @(posedge clk) begin
 		end
 		else g_chain <= g_line_start;
 		g_gy_prev <= gy;
-		g_hsc     <= gy < SLN1;
+		g_hsc     <= gy < SLN1 && !compat;
 	end
 	else if (g_adv) g_chain <= (g_chain == SAD1) ? 15'd0 : g_chain + 15'd1;
 end
@@ -506,7 +526,15 @@ always @(posedge clk) begin
 	else blink_cnt <= blink_cnt + 26'd1;
 end
 
-wire [3:0] trans = textreg[0][1] ? 4'd8 : 4'd0;
+// MZ-2000 / MZ-80B display (CSP draw_screen_2000 / draw_screen_80b): text R0F MOD = 1 / 2 or the boot switch.
+// 40/80 x 25 text of 8 lines from the character VRAM with the MZ-2000 font of the kanji ROM (6018h + code * 32),
+// graphics 640 x 200 x 8 colours from the R, G, I planes (MZ-2000: B, R, G) or 320 x 200 mono from B / R (MZ-80B),
+// 200 lines shown twice.
+assign disp_mod = textreg[15][1:0];
+wire compat2k  = textreg[15][1:0] == 2'd1 || boot_mode == 2'd1;
+wire compat80b = !compat2k && (textreg[15][1:0] == 2'd2 || boot_mode == 2'd2);
+wire compat    = compat2k || compat80b;
+wire [3:0] trans = (textreg[0][1] && !compat) ? 4'd8 : 4'd0;
 
 // text cell -> 8 values (CSP draw_80column_font / draw_40column_font)
 function [31:0] text_cell(input [7:0] attr, input [7:0] t2, input [7:0] kj, input [7:0] p0, input [7:0] p1,
@@ -560,7 +588,8 @@ endfunction
 // 256-colour plane enables: R18 (bits 3-0 screen 1 = high nibble, bits 7-4 screen 0 = low nibble) gated by F6
 wire [7:0] mask256 = cgreg[24] & {cg_mask[0], cg_mask[2], cg_mask[1], cg_mask[0], cg_mask[0], cg_mask[2], cg_mask[1], cg_mask[0]};
 
-wire [10:0] cell_addr = column80 ? (t_base + {4'd0, f_slot}) :
+wire [10:0] cell_addr = compat ? (t_base + (column80 ? {4'd0, f_slot} : {5'd0, f_slot[6:1]})) :
+                        column80 ? (t_base + {4'd0, f_slot}) :
                         (t_base + {5'd0, f_slot[6:1]} + (f_slot[0] ? 11'h400 : 11'h000));
 
 // Kanji glyph requests: a queue of two (one per slot parity) with the cell's context, so a cell whose glyph byte
@@ -603,27 +632,31 @@ always @(posedge clk) begin
 			4'd0: begin
 				tv_b_addr <= cell_addr;
 				// graphics: first byte
-				if (m320) gv_b_addr <= g_chain | gex;
+				if (compat80b) gv_b_addr <= c_gbase + {9'd0, f_slot[6:1]};
+				else if (compat2k) gv_b_addr <= c_gbase + {8'd0, f_slot};
+				else if (m320) gv_b_addr <= g_chain | gex;
 				else if (m640_4) gv_b_addr <= {1'b0, g_chain[13:0]};
 				else if (m640_200) gv_b_addr <= g_chain | gex;
 				else gv_b_addr <= g_chain;
-				if (m_on && (!m320 || !f_slot[0])) g_adv <= 1'b1;
+				if (m_on && !compat && (!m320 || !f_slot[0])) g_adv <= 1'b1;
 			end
 			4'd2: begin
 				f_t1 <= tv_b_dout[0]; f_attr <= tv_b_dout[1]; f_t2 <= tv_b_dout[2];
 				pcg_b_addr <= font8 ? {tv_b_dout[0], t_gl[2:0]} : {tv_b_dout[0][7:1], t_gl};
 				// the glyph comes from the kanji ROM (SDRAM): queue a request, the cell is finished when it is answered
-				f_needk <= tv_b_dout[2][7] && tv_b_dout[1][5:3] == 3'b000 && t_rowok;
-				if (tv_b_dout[2][7] && tv_b_dout[1][5:3] == 3'b000 && t_rowok) begin
+				f_needk <= compat || (tv_b_dout[2][7] && tv_b_dout[1][5:3] == 3'b000 && t_rowok);
+				if (compat || (tv_b_dout[2][7] && tv_b_dout[1][5:3] == 3'b000 && t_rowok)) begin
 					kq_v[f_slot[0]] <= 1'b1;
-					kq_a[f_slot[0]] <= {tv_b_dout[2][6], 17'd0} + (font8 ? {tv_b_dout[2][5:0], tv_b_dout[0], 3'b000} :
+					kq_a[f_slot[0]] <= compat ? 18'h06018 + {5'd0, tv_b_dout[0], 5'd0} + {15'd0, t_gl[2:0]} :
+					                   {tv_b_dout[2][6], 17'd0} + (font8 ? {tv_b_dout[2][5:0], tv_b_dout[0], 3'b000} :
 					                                                       {tv_b_dout[2][5:0], tv_b_dout[0][7:1], 4'b0000})
 					                   + {14'd0, t_gl};
 					kq_t[f_slot[0]] <= f_slot;
 					kq_old[f_slot[0]] <= 1'b0;
 					kq_old[~f_slot[0]] <= kq_v[~f_slot[0]] && !(kq_hit && kq_x == ~f_slot[0]);
-					kc_attr[f_slot[0]] <= tv_b_dout[1];
-					kc_t2[f_slot[0]] <= tv_b_dout[2];
+					// MZ-2000/80B: a plain glyph in the text colour (colour 0 = black, opaque)
+					kc_attr[f_slot[0]] <= compat ? {5'd0, compat2k ? text_color[2:0] : 3'd1} : tv_b_dout[1];
+					kc_t2[f_slot[0]] <= compat ? 8'h80 : tv_b_dout[2];
 					kc_ok[f_slot[0]] <= t_rowok;
 				end
 				f_b0 <= gv_b_dout[0]; f_r0 <= gv_b_dout[1]; f_g0 <= gv_b_dout[2]; f_i0 <= gv_b_dout[3];
@@ -633,7 +666,12 @@ always @(posedge clk) begin
 				if (!f_needk)
 					tres[f_slot[0]] <= text_cell(f_attr, f_t2, 8'd0, pcg_b_dout[0], pcg_b_dout[1], pcg_b_dout[2],
 					                             pcg_b_dout[3], t_rowok);
-				if (m640_200 || m640_16)
+				if (compat2k)
+					gres[f_slot[0]] <= gpix8(f_r0, f_g0, f_i0, 8'd0, {1'b0, vram_mask});
+				else if (compat80b) begin
+					if (!f_slot[0]) g320[f_slot[1]] <= widen(gpix8((vram_page[1] ? f_b0 : 8'd0) | (vram_page[2] ? f_r0 : 8'd0), 8'd0, 8'd0, 8'd0, 4'b0001));
+				end
+				else if (m640_200 || m640_16)
 					gres[f_slot[0]] <= gpix8(f_b0, f_r0, f_g0, f_i0, cgreg[24][3:0]);
 				else if (m640_4)
 					gres[f_slot[0]] <= gpix8(g_hi_prev ? f_g0 : f_b0, g_hi_prev ? f_i0 : f_r0, 8'd0, 8'd0,
@@ -705,14 +743,15 @@ reg  [3:0] tval;
 reg  [5:0] t64;
 always @(*) begin
 	t64 = {tv1[2:0], tv2[2:0]};
-	if (column80) tval = tv1;
+	if (column80 || compat) tval = tv1;
 	else case (textreg[0][3:2])
 		2'b01: tval = tv1;
 		2'b10: tval = tv2;
 		default: tval = (tv1[2:0] != 3'd0) ? tv1 : (tv2[2:0] != 3'd0) ? tv2 : (tv1 & 4'd8) | (tv2 & 4'd8);
 	endcase
 	if (text64) tval = (t64 != 6'd0) ? ((tv1[2:0] != 3'd0) ? tv1 : tv2) : (tv1[3] && tv2[3]) ? 4'd8 : 4'd0;
-	if (!(t_vin && t_hin)) begin tval = trans; t64 = 6'd0; end
+	if (!(t_vin && t_hin) && !compat) begin tval = trans; t64 = 6'd0; end
+	if (compat) t64 = 6'd0;
 end
 
 // current graphics pixel, with the horizontal scroll (dots inserted at the left)
@@ -723,7 +762,7 @@ always @(*) begin
 	if (gidx >= 0)       gval = gcur[gidx[2:0]*8 +: 8];
 	else if (gidx >= -8) gval = gprev[gidx[2:0]*8 +: 8];
 	else                 gval = gprev2[gidx[2:0]*8 +: 8];
-	if (!m_on) gval = 8'd0;
+	if (!m_on && !compat) gval = 8'd0;
 end
 
 // 16-colour palette (CSP analogue monitor) and text colours
@@ -744,6 +783,7 @@ wire [3:0] back16 = {textreg[11][0], textreg[12][0], textreg[11][5], textreg[11]
 // (p_*); one clock later the palette and priority give R, G, B. A dot lasts at least 2 clocks (4 at 85.9 MHz),
 // so the output is stable when the next ce_pix samples it. Blanking and syncs take the same two steps.
 reg  [3:0] p_tval;
+reg        p_compat2k, p_compat80b;
 reg  [5:0] p_t64;
 reg  [7:0] p_gval;
 reg        p_gin, p_act, p_hb, p_vb, p_hs, p_vs;
@@ -803,7 +843,14 @@ wire [23:0] tcol256  = text64 ? pal256i({1'b0, p_t64[5:3], 1'b0, p_t64[2:0]}) :
 
 reg [23:0] rgb;
 always @(*) begin
-	if (m256 && !dbg_notext && !dbg_nogfx) begin
+	if (p_compat2k) begin
+		if (text_color[3]) rgb = digital((p_gval[2:0] != 3'd0) ? p_gval[2:0] : (p_tval != 4'd0) ? p_tval[2:0] : back_color);
+		else               rgb = digital((p_tval != 4'd0) ? p_tval[2:0] : (p_gval[2:0] != 3'd0) ? p_gval[2:0] : back_color);
+		if (!vid_n) rgb = 24'd0;
+	end
+	else if (p_compat80b)
+		rgb = ((p_tval != 4'd0 || p_gval[0]) ^ !vid_n) ? {8'd0, 8'd255, 8'd0} : 24'd0;
+	else if (m256 && !dbg_notext && !dbg_nogfx) begin
 		if (p_gin) begin
 			if (p_tval == 4'd0 || pri256) rgb = gcol256;
 			else if (p_tval == 4'd8)      rgb = 24'd0;
@@ -840,12 +887,12 @@ always @(posedge clk) begin
 			else if (x[3] == 1'b1 || x == -1) begin tcur1 <= tres[0]; tcur2 <= tres[1]; end
 			gprev2 <= (x == -1) ? 64'd0 : gprev;
 			gprev  <= (x == -1) ? 64'd0 : gcur;
-			if (m320) gcur <= expand320(g320[slot_next[1]], slot_next[0]);
+			if (compat ? compat80b : m320) gcur <= expand320(g320[slot_next[1]], slot_next[0]);
 			else      gcur <= widen(gres[slot_next[0]]);
 		end
 
 		// stage 1
-		p_tval <= tval; p_t64 <= t64; p_gval <= gval; p_gin <= g_in; p_act <= act;
+		p_tval <= tval; p_t64 <= t64; p_compat2k <= compat2k; p_compat80b <= compat80b; p_gval <= gval; p_gin <= g_in; p_act <= act;
 		p_hb <= !(x >= 0 && x < 640);
 		p_vb <= !y_act;
 		p_hs <= lines400 ? (hc >= 10'd736 && hc < 10'd800) : (hc >= 10'd768 && hc < 10'd832);

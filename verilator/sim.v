@@ -10,6 +10,7 @@ module top(
    input         clk_sys /*verilator public_flat*/,
    input         reset /*verilator public_flat*/,
    input         lines400,
+   input   [1:0] boot_mode,
 
    output [7:0]  VGA_R /*verilator public_flat*/,
    output [7:0]  VGA_G /*verilator public_flat*/,
@@ -28,6 +29,7 @@ module top(
    input         dbg_dump,       // one clock: write main RAM to out/ram_dump.hex and print the MMU pages
 
    input         ioctl_download,
+   input   [7:0] ioctl_index,
    input         ioctl_wr,
    input  [24:0] ioctl_addr,
    input   [7:0] ioctl_dout,
@@ -77,12 +79,14 @@ mz2500 mz2500
    .clk_sys(clk_sys),
    .reset(reset),
    .lines400(lines400),
+   .boot_mode(boot_mode),
    .ps2_key(ps2_key),
    .joy0(6'd0), .joy1(6'd0), .ps2_mouse(ps2_mouse),
    // fixed RTC so runs are reproducible: 1990-04-01 (Sunday) 12:00:00
    .rtc({1'b0, 8'h00, 8'h00, 8'h90, 8'h04, 8'h01, 8'h12, 8'h00, 8'h00}),
 
    .ioctl_download(ioctl_download),
+   .ioctl_index(ioctl_index),
    .ioctl_wr(ioctl_wr),
    .ioctl_addr(ioctl_addr),
    .ioctl_dout(ioctl_dout),
@@ -124,6 +128,33 @@ always @(posedge clk_sys) if (fdctrace && mz2500.ce_cpu && mz2500.io_rd && mz250
    $display("[fdc] %0d  ce in-cycle D8 din %02x wait_n %0d", cpu_cyc, mz2500.cpu_din, mz2500.wait_n);
 always @(posedge clk_sys) if (fdctrace && mz2500.io_wr_end && mz2500.port[7:2] == 6'b110110)
    $display("[fdc] %0d wr %02x = %02x (%02x)", cpu_cyc, mz2500.port, mz2500.cpu_dout, ~mz2500.cpu_dout);
+
+// +f4trace: print F4 status reads when the value changes
+reg f4trace = 0; reg [7:0] f4_last = 8'h55;
+initial f4trace = $test$plusargs("f4trace");
+always @(posedge clk_sys) if (f4trace && mz2500.io_rd_end && mz2500.port == 8'hF4) begin
+   if (mz2500.io_dout != f4_last) $display("[f4] %0d %02x pc %04x", cpu_cyc, mz2500.io_dout, cpu_pc);
+   f4_last <= mz2500.io_dout;
+end
+
+// +cmttrace: tape signal edges (clk_sys count at each change of PB6) and port A writes
+reg cmttrace = 0; reg cmt_last = 0; reg [63:0] clk_cnt = 0;
+initial cmttrace = $test$plusargs("cmttrace");
+always @(posedge clk_sys) begin
+   clk_cnt <= clk_cnt + 1;
+   if (cmttrace) begin
+      cmt_last <= mz2500.cmt_read;
+      if (mz2500.cmt_read != cmt_last) $display("[cmt] %0d %0d", clk_cnt, mz2500.cmt_read);
+      if (mz2500.io_wr_end && mz2500.port == 8'hE0) $display("[cmtpa] %0d %02x", clk_cnt, mz2500.cpu_dout);
+   end
+end
+
+// +wrtrace=AAAA:BBBB: memory writes made with the PC in AAAA-BBBB (address, page, data)
+reg [31:0] wr_lo = 0, wr_hi = 0; reg wrtrace = 0; reg [15:0] m1_pc = 0;
+always @(posedge clk_sys) if (!mz2500.m1_n && !mz2500.mreq_n) m1_pc <= mz2500.cpu_a;
+initial if ($value$plusargs("wrlo=%h", wr_lo) && $value$plusargs("wrhi=%h", wr_hi)) wrtrace = 1;
+always @(posedge clk_sys) if (wrtrace && mz2500.mem_wr_end && m1_pc >= wr_lo[15:0] && m1_pc <= wr_hi[15:0])
+   $display("[wr] %0d pc %04x a %04x page %02x off %04x d %02x", cpu_cyc, m1_pc, mz2500.cpu_a, mz2500.cur_page, mz2500.cur_off, mz2500.cpu_dout);
 
 // +inttrace: print interrupt acknowledges and RETIs
 reg inttrace = 0;

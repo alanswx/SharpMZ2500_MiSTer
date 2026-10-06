@@ -26,6 +26,7 @@ module mz2500
 	input         clk_sys,        // 85.909091 MHz
 	input         reset,
 	input         lines400,       // front-panel 200/400-line switch: 1 = 400 lines (24 kHz), 0 = 200 lines (15 kHz)
+	input   [1:0] boot_mode,      // front-panel boot switch: 0 = MZ-2500, 1 = MZ-2000, 2 = MZ-80B (applies at reset)
 	input  [10:0] ps2_key,
 	input  [64:0] rtc,            // hps_io RTC: BCD time and date, bit 64 toggles on an update
 	input   [5:0] joy0,           // MiSTer joysticks 1 and 2: right, left, down, up, trigger A, trigger B (active high)
@@ -34,6 +35,7 @@ module mz2500
 
 	// ROM download (hps_io ioctl): boot.rom = IPL at 000000, kanji ROM at 010000
 	input         ioctl_download,
+	input   [7:0] ioctl_index,        // 0 = boot.rom (IPL + kanji), 1 = MZT tape image
 	input         ioctl_wr,
 	input  [24:0] ioctl_addr,
 	input   [7:0] ioctl_dout,
@@ -90,7 +92,9 @@ module mz2500
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 reg  ipl_reset;               // IPL reset from 8255 PC3 (BST) held low
-wire sys_reset = reset | ioctl_download | ipl_reset;
+wire rom_dl    = ioctl_download && ioctl_index == 8'd0;    // boot.rom: holds the machine in reset
+wire tape_dl   = ioctl_download && ioctl_index == 8'd1;    // MZT tape image into SDRAM
+wire sys_reset = reset | rom_dl | ipl_reset;
 reg  [3:0] cpu_rst_cnt;       // special reset: CPU reset pulse
 wire cpu_reset = sys_reset | (cpu_rst_cnt != 4'd0);
 
@@ -106,20 +110,27 @@ localparam integer CLK_SYS_HZ = 42954545;
 localparam integer CLK_SYS_HZ = 85909091;
 `endif
 localparam integer CPU_HZ     = 6000000;
+localparam integer CPU_HZ_LOW = 4000000;    // MZ-80B / MZ-2000 boot modes
 localparam integer PIT_HZ     = 31250;
 localparam integer OPN_HZ     = 2000000;
 
 // CPU 6 MHz: fractional accumulator (the 24 MHz and 21.477 MHz crystals are not related).
+// boot mode, latched at reset (CSP reads config.boot_mode at power on)
+reg  [1:0] boot_m;
+always @(posedge clk_sys) if (reset) boot_m <= boot_mode;
+wire       mode_2500 = boot_m == 2'd0;
+wire [27:0] cpu_hz = mode_2500 ? CPU_HZ : CPU_HZ_LOW;
+
 reg [27:0] cpu_acc;
 reg        ce_cpu;
 always @(posedge clk_sys) begin
 	ce_cpu <= 1'b0;
 	if (reset) cpu_acc <= 28'd0;
-	else if (cpu_acc >= CLK_SYS_HZ - CPU_HZ) begin
-		cpu_acc <= cpu_acc - (CLK_SYS_HZ - CPU_HZ);
+	else if (cpu_acc >= CLK_SYS_HZ - cpu_hz) begin
+		cpu_acc <= cpu_acc - (CLK_SYS_HZ - cpu_hz);
 		ce_cpu  <= 1'b1;
 	end
-	else cpu_acc <= cpu_acc + CPU_HZ;
+	else cpu_acc <= cpu_acc + cpu_hz;
 end
 assign cpu_ce = ce_cpu;
 
@@ -228,18 +239,55 @@ wire       opn_pa_oe;
 reg  [5:0] page[0:7];
 reg  [2:0] bank;
 reg  [1:0] mmu_mode;
+reg  [7:0] pio_pa;
 reg  [7:0] kanji_bank;   // CF
 reg  [4:0] dic_bank;     // CE
 
-wire [5:0]  cur_page = page[cpu_a[15:13]];
-wire [12:0] cur_off  = cpu_a[12:0];
+// MZ-2000 / MZ-80B compatibility windows (CSP memory.cpp update_vram_map), on top of the eight pages:
+//   B7 mode 3 (MZ-2000): PIO port A bits 7-6 = 10: GVRAM plane vram_page at C000-FFFF; 11: text VRAM at D000-DFFF.
+//   B7 mode 2 (MZ-80B):  10: text VRAM at D000-DFFF, GVRAM plane (vram_page bit 0) at E000-FFFF;
+//                        11: the same at 5000-5FFF / 6000-7FFF.
+// A GVRAM window is presented as the direct GVRAM page of that plane, the text VRAM as page 38, so the decode,
+// the wait states and the display-period WAIT below apply unchanged.
+reg  [2:0] vram_page;            // F7 (MZ-2000 display mode) or F4-F7 (MZ-80B display mode)
+wire [1:0] disp_mod;             // text R0F MOD (video module)
+always @(posedge clk_sys) begin
+	if (sys_reset) vram_page <= 3'd0;
+	else if (io_wr_end && ((disp_mod == 2'd1 && port == 8'hF7) || (disp_mod == 2'd2 && port[7:2] == 6'b111101)))
+		vram_page <= cpu_dout[2:0];
+end
+wire [1:0] vram_sel = pio_pa[7:6];
+wire [5:0] page_raw = page[cpu_a[15:13]];
+reg  [5:0] cur_page;
+reg [12:0] cur_off;
+reg        compat_win;           // the access is in a compatibility window (1 wait in those modes, CSP)
+always @(*) begin
+	cur_page = page_raw; cur_off = cpu_a[12:0]; compat_win = 1'b0;
+	if (mmu_mode == 2'd3) begin
+		if (vram_sel == 2'b10 && cpu_a[15:14] == 2'b11) begin
+			cur_page = {3'b100, vram_page[1:0], cpu_a[13]}; compat_win = 1'b1;          // plane, offset 0-3FFF
+		end
+		else if (vram_sel == 2'b11 && cpu_a[15:12] == 4'hD) begin
+			cur_page = 6'h38; cur_off = {1'b0, cpu_a[11:0]}; compat_win = 1'b1;
+		end
+	end
+	else if (mmu_mode == 2'd2 && vram_sel[1]) begin
+		if (cpu_a[15:12] == (vram_sel[0] ? 4'h5 : 4'hD)) begin
+			cur_page = 6'h38; cur_off = {1'b0, cpu_a[11:0]}; compat_win = 1'b1;
+		end
+		else if (cpu_a[15:13] == (vram_sel[0] ? 3'd3 : 3'd7)) begin
+			cur_page = {4'b1000, vram_page[0], 1'b0}; compat_win = 1'b1;                 // plane B/R, 8 KB
+		end
+	end
+end
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Memories
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-wire ld_ipl   = ioctl_download && ioctl_addr[24:15] == 10'd0;
-wire ld_kanji = ioctl_download && ioctl_addr[24:16] >= 9'd1 && ioctl_addr[24:16] <= 9'd4;
+wire ld_ipl   = rom_dl && ioctl_addr[24:15] == 10'd0;
+wire ld_kanji = rom_dl && ioctl_addr[24:16] >= 9'd1 && ioctl_addr[24:16] <= 9'd4;
+wire ld_tape  = tape_dl && ioctl_addr[24:20] == 5'd0;      // up to 1 MB at SDRAM 100000
 
 // SDRAM holds main RAM 256 KB (pages 00-1F) at 000000-03FFFF, the IPL ROM (pages 34-37) at 040000-047FFF and the
 // kanji ROM at 080000-0BFFFF (CPU window: page 39 with CF bit 7; text raster glyph fetches). The controller
@@ -253,6 +301,24 @@ wire [24:0] cpu_ram_addr = kwin        ? {5'd0, 2'b10, kanji_bank[6:0], cur_off[
                            cur_page[5] ? {6'd0, 1'b1, 3'b000, cur_page[1:0], cur_off} : {7'd0, cur_page[4:0], cur_off};
 
 wire [17:0] kanji_ld_addr = ioctl_addr[17:0] - 18'h10000;
+
+// Data recorder (rtl/mz2500_cmt.sv): the tape image is downloaded to SDRAM 100000 (ioctl index 1); the player
+// reads it a byte at a time through the SDRAM arbiter (lowest priority).
+reg        tape_loaded;
+reg [19:0] tape_len;
+reg        tape_dl_d;
+always @(posedge clk_sys) begin
+	tape_dl_d <= tape_dl;
+	if (reset) begin tape_loaded <= 1'b0; tape_len <= 20'd0; end
+	else if (tape_dl && !tape_dl_d) begin tape_loaded <= 1'b0; tape_len <= 20'd0; end
+	else if (ld_tape && ioctl_wr) tape_len <= ioctl_addr[19:0] + 20'd1;
+	else if (!tape_dl && tape_dl_d) tape_loaded <= tape_len != 20'd0;
+end
+wire        cmt_rd_req;
+wire [19:0] cmt_rd_addr;
+reg         cmt_rd_ack, cmt_rd_busy;
+reg   [7:0] cmt_rd_q;
+wire        cmt_read, cmt_tready_n, cmt_wready_n, cmt_tend, cmt_motor;
 wire [17:0] kanji_raddr;
 wire        kanji_req;
 wire  [6:0] kanji_tag;
@@ -260,10 +326,13 @@ reg         kanji_ack;
 reg   [6:0] kanji_ack_tag;
 reg   [7:0] kanji_q;
 
-localparam RAM_IDLE = 2'd0, RAM_RD = 2'd1, RAM_WR = 2'd2, RAM_KR = 2'd3;
-reg  [1:0] ram_st;
+localparam RAM_IDLE = 3'd0, RAM_RD = 3'd1, RAM_WR = 3'd2, RAM_KR = 3'd3, RAM_TR = 3'd4;
+reg  [2:0] ram_st;
 reg  [1:0] ram_cnt;
 reg        ram_wpend;
+reg        ld_pend;              // ROM / tape download write (own slot: the CPU may be writing at the same time)
+reg [24:0] ld_addr;
+reg  [7:0] ld_data;
 reg [24:0] ram_waddr;
 reg  [7:0] ram_wdata;
 reg        ram_rdone;
@@ -271,6 +340,8 @@ reg  [7:0] ram_q;
 
 always @(posedge clk_sys) begin
 	kanji_ack <= 1'b0;
+	cmt_rd_ack <= 1'b0;
+	if (cmt_rd_ack) cmt_rd_busy <= 1'b0;   // the player has dropped or replaced its request by the next clock
 	if (cyc_start) ram_rdone <= 1'b0;
 	case (ram_st)
 		RAM_IDLE:
@@ -282,8 +353,15 @@ always @(posedge clk_sys) begin
 				ram_we <= 1'b1; ram_addr <= ram_waddr; ram_din <= ram_wdata;
 				ram_wpend <= 1'b0; ram_cnt <= 2'd3; ram_st <= RAM_WR;
 			end
+			else if (ld_pend) begin
+				ram_we <= 1'b1; ram_addr <= ld_addr; ram_din <= ld_data;
+				ld_pend <= 1'b0; ram_cnt <= 2'd3; ram_st <= RAM_WR;
+			end
 			else if (mem_rd && ram_page && !ram_rdone && !cpu_reset) begin
 				ram_rd <= 1'b1; ram_addr <= cpu_ram_addr; ram_cnt <= 2'd3; ram_st <= RAM_RD;
+			end
+			else if (cmt_rd_req && !cmt_rd_busy) begin
+				ram_rd <= 1'b1; ram_addr <= {5'd0, 1'b1, cmt_rd_addr[18:0]}; ram_cnt <= 2'd3; ram_st <= RAM_TR; cmt_rd_busy <= 1'b1;
 			end
 		RAM_RD:
 			if (ram_cnt != 2'd0) ram_cnt <= ram_cnt - 2'd1;
@@ -291,6 +369,9 @@ always @(posedge clk_sys) begin
 		RAM_KR:
 			if (ram_cnt != 2'd0) ram_cnt <= ram_cnt - 2'd1;
 			else if (ram_ready) begin kanji_q <= ram_dout; kanji_ack <= 1'b1; ram_rd <= 1'b0; ram_st <= RAM_IDLE; end
+		RAM_TR:
+			if (ram_cnt != 2'd0) ram_cnt <= ram_cnt - 2'd1;
+			else if (ram_ready) begin cmt_rd_q <= ram_dout; cmt_rd_ack <= 1'b1; ram_rd <= 1'b0; ram_st <= RAM_IDLE; end
 		RAM_WR:
 			if (ram_cnt != 2'd0) ram_cnt <= ram_cnt - 2'd1;
 			else if (ram_ready) begin ram_we <= 1'b0; ram_st <= RAM_IDLE; end
@@ -300,17 +381,20 @@ always @(posedge clk_sys) begin
 		ram_wpend <= 1'b1; ram_waddr <= cpu_ram_addr; ram_wdata <= cpu_dout;
 	end
 	if (ld_ipl && ioctl_wr) begin
-		ram_wpend <= 1'b1; ram_waddr <= 25'h40000 | {10'd0, ioctl_addr[14:0]}; ram_wdata <= ioctl_dout;
+		ld_pend <= 1'b1; ld_addr <= 25'h40000 | {10'd0, ioctl_addr[14:0]}; ld_data <= ioctl_dout;
+	end
+	if (ld_tape && ioctl_wr) begin
+		ld_pend <= 1'b1; ld_addr <= {5'd0, 1'b1, ioctl_addr[18:0]}; ld_data <= ioctl_dout;
 	end
 	if (ld_kanji && ioctl_wr) begin
-		ram_wpend <= 1'b1; ram_waddr <= {5'd0, 2'b10, kanji_ld_addr}; ram_wdata <= ioctl_dout;
+		ld_pend <= 1'b1; ld_addr <= {5'd0, 2'b10, kanji_ld_addr}; ld_data <= ioctl_dout;
 	end
 	if (reset) begin
-		ram_st <= RAM_IDLE; ram_rd <= 1'b0; ram_we <= 1'b0; ram_wpend <= 1'b0; ram_rdone <= 1'b0;
+		ram_st <= RAM_IDLE; ram_rd <= 1'b0; ram_we <= 1'b0; ram_wpend <= 1'b0; ld_pend <= 1'b0; ram_rdone <= 1'b0; cmt_rd_busy <= 1'b0;
 	end
 end
 
-assign ioctl_wait = ram_wpend || ram_st != RAM_IDLE;
+assign ioctl_wait = ld_pend || (ioctl_download && ram_st != RAM_IDLE);
 // The CPU waits for its SDRAM read, and on a write while the previous posted write hasn't been issued yet
 // (one-entry write buffer: a PUSH right behind a raster glyph fetch would otherwise overwrite the first byte).
 wire   ram_wait    = (mem_rd && ram_page && !ram_rdone) || (mem_wr && !cur_page[5] && ram_wpend);
@@ -323,7 +407,6 @@ wire [7:0] vid_io_dout, vid_mem_dout;
 wire       gv_busy;
 wire       hblank_t, vblank_t, hblank_g, vblank_g;
 reg  [7:0] ppi_pa, ppi_pc;
-reg  [7:0] pio_pa;
 
 mz2500_video video
 (
@@ -353,6 +436,10 @@ mz2500_video video
 	.column80(pio_pa[5]),
 	.screen_mask(ppi_pc[0]),
 	.pal4096(~opn_pa[2]),
+	.boot_mode(boot_m),
+	.vid_n(ppi_pa[4]),
+	.vram_page(vram_page),
+	.disp_mod(disp_mod),
 
 	.kanji_addr(kanji_raddr),
 	.kanji_req(kanji_req),
@@ -384,7 +471,8 @@ always @(posedge clk_sys) begin
 	else begin
 		if (cyc_start) begin
 			if (mem_rd | mem_wr) begin
-				if (!m1_n)                     wait_cnt <= 3'd1;
+				if (!mode_2500)                wait_cnt <= (cur_page[5:2] == 4'b1100 || compat_win) ? 3'd1 : 3'd0;  // 80B/2000
+				else if (!m1_n)                wait_cnt <= 3'd1;
 				else if (cur_page[5:4] == 2'b10) wait_cnt <= 3'd1;   // GVRAM
 				else if (cur_page[5:2] == 4'b1100) wait_cnt <= 3'd2; // RMW
 				else if (cur_page == 6'h38)    wait_cnt <= 3'd1;
@@ -394,7 +482,8 @@ always @(posedge clk_sys) begin
 				if (pg_gv && !hblank_g && !vblank_g) wait_g <= 1'b1;
 			end
 			else begin
-				if (port[7:3] == 5'b11011 || port[7:2] == 6'b111010 || port[7:1] == 7'b1100100) wait_cnt <= 3'd1;
+				if (mode_2500 && (port[7:3] == 5'b11011 || port[7:2] == 6'b111010)) wait_cnt <= 3'd1;   // FDC, PIO
+				else if (port[7:1] == 7'b1100100) wait_cnt <= 3'd1;                                       // OPN
 				else if (port == 8'hCC) wait_cnt <= 3'd3;
 				else wait_cnt <= 3'd0;
 			end
@@ -495,7 +584,7 @@ mz_pit8253 pit
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 wire [7:0] kbd_data;
-wire [7:0] ppi_pb = {kbd_data[7], 1'b0, 1'b1, 1'b1, 1'b1, 1'b1, 1'b1, ~vblank_g};
+wire [7:0] ppi_pb = {kbd_data[7], cmt_read, cmt_tready_n, cmt_wready_n, cmt_tend, 1'b1, 1'b1, ~vblank_g};
 reg  [7:0] ppi_pc_new;
 reg [13:0] bst_cnt;   // 100 us at clk_sys
 
@@ -510,7 +599,7 @@ end
 
 always @(posedge clk_sys) begin
 	ipl_reset <= 1'b0;
-	if (reset | ioctl_download | ipl_reset) begin
+	if (reset | rom_dl | ipl_reset) begin
 		ppi_pa <= 8'h00; ppi_pc <= 8'h00;
 		cpu_rst_cnt <= 4'd0;
 		bst_cnt <= 14'd0;
@@ -539,7 +628,7 @@ reg  [7:0] pio_ctl_a, pio_ctl_b;
 wire       rtc_pulse_n;
 wire [3:0] rtc_dout;
 // OPN port B: CSP 37h (+40h for 200 lines); bit 3 is the RTC pulse output
-wire [7:0] opn_port_b = {1'b0, ~lines400, 1'b1, 1'b1, rtc_pulse_n, 3'b111};
+wire [7:0] opn_port_b = {1'b0, ~lines400, boot_m != 2'd2, boot_m != 2'd1, rtc_pulse_n, 3'b111};
 
 rp5c15 #(.CLK_HZ(CLK_SYS_HZ)) rtc_chip
 (
@@ -673,6 +762,26 @@ wire       trg_a   = joy_mode[6] ? joy_mode[2] : joy_mode[0];
 wire       trg_b   = joy_mode[6] ? joy_mode[3] : joy_mode[1];
 wire [7:0] joy_rd  = {2'b00, ~(joy_sel[4] | ~trg_a), ~(joy_sel[5] | ~trg_b),
                       ~(joy_dir & joy_sel[0]), ~(joy_dir & joy_sel[1]), ~(joy_dir & joy_sel[2]), ~(joy_dir & joy_sel[3])};
+
+mz2500_cmt #(.CLK_HZ(CLK_SYS_HZ)) cmt
+(
+	.clk(clk_sys),
+	.reset(sys_reset),
+	.mz80b(boot_m == 2'd2),
+	.fmt80b(boot_m != 2'd0),
+	.pa(ppi_pa),
+	.loaded(tape_loaded),
+	.tape_len(tape_len),
+	.rd_req(cmt_rd_req),
+	.rd_addr(cmt_rd_addr),
+	.rd_ack(cmt_rd_ack),
+	.rd_data(cmt_rd_q),
+	.read(cmt_read),
+	.tready_n(cmt_tready_n),
+	.wready_n(cmt_wready_n),
+	.tend(cmt_tend),
+	.motor(cmt_motor)
+);
 
 mz2500_kbd kbd
 (

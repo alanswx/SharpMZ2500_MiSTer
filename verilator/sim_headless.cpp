@@ -58,6 +58,8 @@ struct Options {
     std::string fdd[2];                   // --fdd / --fdd-b: D88 images in drives 1 and 2
     bool        fdd_readonly = false;     // --fdd-readonly: never write back to the image files
     std::string wav_file;                 // --wav: audio output, 48 kHz 16-bit stereo
+    std::string tape_file;                // --tape: MZT image (ioctl index 1)
+    int         boot_mode = 0;            // --boot-mode 2500|2000|80b
     uint32_t    save_frame = 0;           // --save-state FRAME:FILE
     std::string save_file;
     std::string load_file;                // --load-state FILE
@@ -89,6 +91,8 @@ static void usage()
 "                         (give the same --fdd/--fdd-b images; frame numbers continue)\n"
 "  --dump-at-cpu-cycle N  write main RAM (SDRAM model) to out/ram_dump.hex and print the MMU pages at CPU cycle N\n"
 "  --mouse F:DX:DY:B      PS/2 mouse packet at frame F (DX right, DY up, B: 1 left, 2 right), repeatable\n"
+"  --tape FILE            MZT tape image in the data recorder (loaded through ioctl index 1)\n"
+"  --boot-mode M          front-panel boot switch: 2500 (default), 2000 or 80b\n"
 "  --wav FILE             record the audio output (48 kHz, 16-bit stereo WAV)\n"
 "  --ipl FILE, --kanji FILE   load IPL.ROM / KANJI.ROM separately (default: ../software/roms/extracted/...)\n"
 "fb_hash is FNV-1a 32 over the RGB888 bytes of the active picture.\n");
@@ -140,6 +144,8 @@ static bool parse_args(int argc, char **argv, Options &o)
         else if (a == "--fdd-b") o.fdd[1] = next();
         else if (a == "--fdd-readonly") o.fdd_readonly = true;
         else if (a == "--wav") o.wav_file = next();
+        else if (a == "--tape") o.tape_file = next();
+        else if (a == "--boot-mode") { std::string m = next(); o.boot_mode = (m == "2000") ? 1 : (m == "80b" || m == "80B") ? 2 : 0; }
         else if (a == "--save-state") {
             std::string v = next();
             size_t c = v.find(':');
@@ -229,7 +235,7 @@ private:
     bool      dump_done = false;
     bool      mouse_tog = false;
     int       finish();
-    void ioctl_load(uint32_t base, const std::vector<uint8_t> &data);
+    void ioctl_load(uint32_t base, const std::vector<uint8_t> &data, int index = 0);
 };
 
 void Sim::sd_step()
@@ -377,8 +383,9 @@ static bool read_file(const std::string &name, std::vector<uint8_t> &out)
 }
 
 // hps_io style download: one byte every 4 clocks, machine held in reset by ioctl_download.
-void Sim::ioctl_load(uint32_t base, const std::vector<uint8_t> &data)
+void Sim::ioctl_load(uint32_t base, const std::vector<uint8_t> &data, int index)
 {
+    top->ioctl_index = index;
     top->ioctl_download = 1;
     for (size_t i = 0; i < data.size(); i++) {
         top->ioctl_addr = base + (uint32_t)i;
@@ -581,6 +588,7 @@ int Sim::run()
 
     top->reset = 1;
     top->lines400 = opt.lines400;
+    top->boot_mode = opt.boot_mode;
     top->ps2_key = 0;
     top->ioctl_download = 0; top->ioctl_wr = 0;
     for (int i = 0; i < 256; i++) clock();
@@ -592,6 +600,13 @@ int Sim::run()
     top->reset = 0;
     for (int k = 0; k < 2; k++)
         if (!opt.fdd[k].empty() && !mount_fdd(k)) return 2;
+    if (!opt.tape_file.empty()) {
+        std::vector<uint8_t> t;
+        if (!read_file(opt.tape_file, t)) { fprintf(stderr, "cannot read %s\n", opt.tape_file.c_str()); return 2; }
+        ioctl_load(0, t, 1);
+        top->ioctl_index = 0;
+        if (!opt.quiet) fprintf(stderr, "[sim] tape '%s', %zu bytes\n", opt.tape_file.c_str(), t.size());
+    }
     // Discard the partial picture before the first full frame.
     while (!top->VGA_VB) clock();
     while (top->VGA_VB) clock();
