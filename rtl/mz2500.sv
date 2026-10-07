@@ -361,7 +361,7 @@ always @(posedge clk_sys) begin
 				ram_rd <= 1'b1; ram_addr <= cpu_ram_addr; ram_cnt <= 2'd3; ram_st <= RAM_RD;
 			end
 			else if (cmt_rd_req && !cmt_rd_busy) begin
-				ram_rd <= 1'b1; ram_addr <= {5'd0, 1'b1, cmt_rd_addr[18:0]}; ram_cnt <= 2'd3; ram_st <= RAM_TR; cmt_rd_busy <= 1'b1;
+				ram_rd <= 1'b1; ram_addr <= {4'd0, 1'b1, cmt_rd_addr}; ram_cnt <= 2'd3; ram_st <= RAM_TR; cmt_rd_busy <= 1'b1;
 			end
 		RAM_RD:
 			if (ram_cnt != 2'd0) ram_cnt <= ram_cnt - 2'd1;
@@ -384,7 +384,7 @@ always @(posedge clk_sys) begin
 		ld_pend <= 1'b1; ld_addr <= 25'h40000 | {10'd0, ioctl_addr[14:0]}; ld_data <= ioctl_dout;
 	end
 	if (ld_tape && ioctl_wr) begin
-		ld_pend <= 1'b1; ld_addr <= {5'd0, 1'b1, ioctl_addr[18:0]}; ld_data <= ioctl_dout;
+		ld_pend <= 1'b1; ld_addr <= {4'd0, 1'b1, ioctl_addr[19:0]}; ld_data <= ioctl_dout;
 	end
 	if (ld_kanji && ioctl_wr) begin
 		ld_pend <= 1'b1; ld_addr <= {5'd0, 2'b10, kanji_ld_addr}; ld_data <= ioctl_dout;

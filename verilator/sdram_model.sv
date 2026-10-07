@@ -7,7 +7,7 @@
 // the word last read (no write since) is a cache hit and keeps 'ready' high, as in the controller.
 
 // MZ_FAST_SIM: clk_sys at half rate, so every latency is halved too (same time in ns).
-module sdram_model #(parameter AW = 20)    // 1 MB: main RAM, IPL, kanji ROM
+module sdram_model #(parameter AW = 21)    // 2 MB: main RAM, IPL, kanji ROM, tape (100000)
 (
 	input             clk,
 	input      [24:0] addr,
