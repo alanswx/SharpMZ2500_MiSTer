@@ -59,12 +59,14 @@ end
 // ---- transport ----
 reg  [7:0] pa_d;
 reg        playing, rewinding, apss;
+reg        ffwd;                     // fast forward without APSS: winds one record per 0.5 s until STOP or the end
+reg [15:0] ff_cnt;
 reg  [1:0] skip;                     // APSS fast forward: reading the record's size (bytes 12h, 13h), then moving on
 reg [15:0] apss_cnt;                 // 350 ms of READ high after an APSS stop, in samples
 assign tready_n = !loaded;
 assign wready_n = 1'b1;
-assign tend     = !playing;
-assign motor    = playing;
+assign tend     = !(playing || ffwd);
+assign motor    = playing || ffwd;
 
 // ---- signal generator ----
 // phases of one record
@@ -124,7 +126,7 @@ always @(posedge clk) begin
 	if (reset || !loaded) begin
 		pa_d <= 8'hFF;
 		playing <= 1'b0; rewinding <= 1'b0; apss <= 1'b0; apss_cnt <= 16'd0;
-		rec <= 20'd0; read <= 1'b0; rd_req <= 1'b0; byte_ok <= 1'b0; skip <= 2'd0; size <= 16'd0;
+		rec <= 20'd0; read <= 1'b0; rd_req <= 1'b0; byte_ok <= 1'b0; skip <= 2'd0; size <= 16'd0; ffwd <= 1'b0; ff_cnt <= 16'd0;
 		phase <= P_SIL1; cnt <= 16'd48000;
 	end
 	else begin
@@ -133,27 +135,28 @@ always @(posedge clk) begin
 		if (!mz80b) begin
 			// CSP applies the edges of one write in this order, each cancelling the motion before it: REW, FF, PLAY,
 			// STOP. The MZ-2000 mode IPL writes 10h (all four) to leave the deck stopped where it is.
-			if (pa_d[3] && !pa[3]) begin playing <= 1'b0; rewinding <= 1'b0; read <= 1'b0; skip <= 2'd0; end // STOP
-			else if (pa_d[2] && !pa[2]) begin playing <= 1'b1; rewinding <= 1'b0; skip <= 2'd0; end           // PLAY
-			else if (pa_d[1] && !pa[1]) begin                                                                // FF
+			if (pa_d[3] && !pa[3]) begin playing <= 1'b0; rewinding <= 1'b0; read <= 1'b0; skip <= 2'd0; ffwd <= 1'b0; end // STOP
+			else if (pa_d[2] && !pa[2]) begin playing <= 1'b1; rewinding <= 1'b0; skip <= 2'd0; ffwd <= 1'b0; end           // PLAY
+			else if (pa_d[1] && !pa[1]) begin                                                                              // FF
 				playing <= 1'b0; rewinding <= 1'b0; apss <= !pa[7];
 				if (!pa[7]) begin
 					// to the next record: its size is in its header
 					if (!at_end) begin skip <= 2'd1; rd_req <= 1'b1; rd_addr <= rec + 20'h12; byte_ok <= 1'b0; end
 					phase <= P_SIL1; cnt <= 16'd48000;
 				end
-				else rec <= tape_len;
+				else begin ffwd <= 1'b1; ff_cnt <= 16'd0; end
 			end
-			else if (pa_d[0] && !pa[0]) begin rewinding <= 1'b1; playing <= 1'b0; apss <= !pa[7]; skip <= 2'd0; end // REW
+			else if (pa_d[0] && !pa[0]) begin rewinding <= 1'b1; playing <= 1'b0; apss <= !pa[7]; skip <= 2'd0; ffwd <= 1'b0; end // REW
 		end
 		else begin
-			if (!pa_d[0] && pa[0]) begin
-				playing <= 1'b0;
-				if (pa[1]) rec <= at_end ? rec : rec + 20'd128 + {4'd0, size};
-				else rewinding <= 1'b1;
+			// the 8255 clears port A at reset, so the IPL's first FFh write is an FF edge here: it is stopped right after
+			if (!pa_d[3] && pa[3]) begin playing <= 1'b0; rewinding <= 1'b0; read <= 1'b0; ffwd <= 1'b0; skip <= 2'd0; end
+			else if (!pa_d[2] && pa[2]) begin playing <= 1'b1; rewinding <= 1'b0; ffwd <= 1'b0; skip <= 2'd0; end
+			else if (!pa_d[0] && pa[0]) begin
+				playing <= 1'b0; apss <= 1'b0;
+				if (pa[1]) begin ffwd <= 1'b1; ff_cnt <= 16'd0; end
+				else begin rewinding <= 1'b1; ffwd <= 1'b0; skip <= 2'd0; end
 			end
-			if (!pa_d[2] && pa[2]) begin playing <= 1'b1; rewinding <= 1'b0; end
-			if (!pa_d[3] && pa[3]) begin playing <= 1'b0; rewinding <= 1'b0; read <= 1'b0; end
 		end
 
 		// rewind: instant, to the top (APSS: to the start of the previous record is not tracked; go to the top)
@@ -175,7 +178,17 @@ always @(posedge clk) begin
 		if (rd_ack && skip == 2'd2) begin
 			skip <= 2'd0;
 			rec <= rec + 20'd128 + {4'd0, rd_data, size[7:0]};
-			apss_cnt <= 16'd16800;                        // the gap is found: READ high for 350 ms
+			phase <= P_SIL1; cnt <= 16'd48000;
+			if (apss) apss_cnt <= 16'd16800;              // the gap is found: READ high for 350 ms
+		end
+		// fast forward: one record per 0.5 s of winding
+		if (tick && ffwd) begin
+			if (ff_cnt != 16'd24000) ff_cnt <= ff_cnt + 16'd1;
+			else if (at_end) ffwd <= 1'b0;
+			else if (skip == 2'd0) begin
+				ff_cnt <= 16'd0;
+				skip <= 2'd1; rd_req <= 1'b1; rd_addr <= rec + 20'h12; byte_ok <= 1'b0;
+			end
 		end
 
 		// ---- signal ----

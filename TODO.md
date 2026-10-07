@@ -140,7 +140,8 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 - [x] Data recorder (`rtl/mz2500_cmt.sv`, CSP cmt.cpp/datarec.cpp): MZT image in SDRAM from the OSD (F1), MZ-2500 and
       MZ-80B/2000 MZT encodings, REW/FF/PLAY/STOP edges in CSP's order (the 2000 IPL writes 10h to stop), APSS
 - [x] MZ-1Z001 BASIC loads through the 2000-mode IPL: "Ready" pixel-identical to BubiZ
-- [ ] MZ-80B mode: an 80B tape (green display, 320x200 graphics) checked against BubiZ
+- [x] MZ-80B mode: SB-5520 BASIC loads to "Ready", pixel-identical to BubiZ `-mz80b` (green display)
+- [ ] MZ-80B 320x200 graphics checked against BubiZ (needs a graphics program)
 - [ ] More MZ-2000 tapes (SharpMZ's `software/mz2200` titles; Puckn Boy after MZ-1Z002 from one multi-record MZT)
 - [ ] Tape recording (MIC, PC7), the SharpMZ_MiSTer image-append approach
 

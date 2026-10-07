@@ -138,7 +138,7 @@ always @(posedge clk_sys) if (f4trace && mz2500.io_rd_end && mz2500.port == 8'hF
 end
 
 // +cmttrace: tape signal edges (clk_sys count at each change of PB6) and port A writes
-reg cmttrace = 0; reg cmt_last = 0; reg [63:0] clk_cnt = 0;
+reg cmttrace = 0; reg cmt_last = 0; reg [4:0] cmt_ph = 0; reg [63:0] clk_cnt = 0;
 initial cmttrace = $test$plusargs("cmttrace");
 always @(posedge clk_sys) begin
    clk_cnt <= clk_cnt + 1;
@@ -146,6 +146,8 @@ always @(posedge clk_sys) begin
       cmt_last <= mz2500.cmt_read;
       if (mz2500.cmt_read != cmt_last) $display("[cmt] %0d %0d", clk_cnt, mz2500.cmt_read);
       if (mz2500.io_wr_end && mz2500.port == 8'hE0) $display("[cmtpa] %0d %02x", clk_cnt, mz2500.cpu_dout);
+      cmt_ph <= mz2500.cmt.phase;
+      if (mz2500.cmt.phase != cmt_ph) $display("[cmtph] %0d phase %0d rec %05x size %04x playing %0d", clk_cnt, mz2500.cmt.phase, mz2500.cmt.rec, mz2500.cmt.size, mz2500.cmt.playing);
    end
 end
 

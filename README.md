@@ -36,7 +36,7 @@ RS-232C, drives 3-4: see [TODO.md](TODO.md).
 
 MZ-2000 mode: set Boot mode to MZ-2000, load an MZT (e.g. MZ-1Z001 BASIC), reset and press C at the IPL menu. In the
 sim (`--boot-mode 2000 --tape MZ-1Z001.mzt --type 600:c`) BASIC comes up "Ready" by frame 13500, pixel-identical to
-BubiZ-2500 `-mz2000`.
+BubiZ-2500 `-mz2000`; in MZ-80B mode SB-5520 BASIC likewise (`--boot-mode 80b`).
 
 ROMs: build `boot.rom` from your dumps with `tools/make_bootrom.sh IPL.ROM KANJI.ROM boot.rom` (CRCs in
 docs/roms.md) and put it in `games/SharpMZ2500/` on the SD card; the sim reads `software/roms/extracted/` by default
