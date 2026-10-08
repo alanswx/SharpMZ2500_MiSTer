@@ -142,7 +142,10 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 - [x] MZ-1Z001 BASIC loads through the 2000-mode IPL: "Ready" pixel-identical to BubiZ
 - [x] MZ-80B mode: SB-5520 BASIC loads to "Ready", pixel-identical to BubiZ `-mz80b` (green display)
 - [ ] MZ-80B 320x200 graphics checked against BubiZ (needs a graphics program)
-- [ ] More MZ-2000 tapes (SharpMZ's `software/mz2200` titles; Puckn Boy after MZ-1Z002 from one multi-record MZT)
+- [x] Puckn Boy after MZ-1Z002 from one two-record MZT (`MON`, `L`, `PUCKN BOY` at FILE NAME): the monitor finds
+      MZ-1Z002, skips it, loads and runs Puckn Boy; colour title pixel-identical to BubiZ. The player pauses with the
+      motor and carries on where it stopped, so SharpMZ_MiSTer's stop-mid-block fix (cmt.vhd) has no counterpart here.
+- [ ] More MZ-2000 tapes (SharpMZ's `software/mz2200` titles)
 - [ ] Tape recording (MIC, PC7), the SharpMZ_MiSTer image-append approach
 
 ## Phase 11: SDRAM
