@@ -163,7 +163,12 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 
 - [ ] Final CONF_STR: ROM loading (boot0..3.rom or F entries; decide), drives, tape, boot mode, model 2500/2520
       (MZ-2520: `ipl2520.rom`, no data recorder, no 80B/2000 modes), RAM size, line mode, mouse, joysticks
-- [ ] MGL files for hardware tests; port `tools/mister_test.py` / `tools/triage.py` from SharpMZ_MiSTer
+- [x] MGL files (`tools/make_mgls.py`) and hardware tests (`tools/mister_test.py`, `tools/mister_run.sh`,
+      `tools/mister_tests/`); first MiSTer run 2026-10-08: IPL, Ys III, Dust Box 1-16 + Special 1, MZ-2000/80B BASIC
+      from tape, Puckn Boy all work (Dust Box Special 2-3 are data disks: "not master" in BubiZ too)
+- [ ] Keyboard: a symbolic map option for US/PC keyboards (shifted symbols translated, as the old SharpMZ core
+      does), keeping the positional JIS map as the default
+- [ ] Ys III past the intro on hardware (Space/Enter don't skip it: let it run, then start a game)
 - [ ] Release notes, docs for users (ROM file names and where to put them)
 
 ## Later / optional

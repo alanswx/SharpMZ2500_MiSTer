@@ -21,8 +21,18 @@ In the Verilator simulation, with the real IPL and kanji ROMs:
   issue's program; the 256-colour title screens of issues 1-7 and Special 1 match BubiZ-2500 pixel for pixel at
   frame 6000 (vol. 2 differs only in an animated raindrop caught at another moment).
 
-The FPGA build fits (43% logic, 298/553 block RAMs, timing met at 85.9 MHz with +0.69 ns) with drives 1 and 2 in
-the OSD; it has not been tried on a MiSTer yet.
+Tested on a MiSTer (DE10-Nano with SDRAM, 2026-10-08): the IPL menu in 400 and 200 lines, Ys III's intro, the
+256-colour titles of Dust Box 1-16 and Special 1 and their menus from the keyboard, MZ-1Z001 / MZ-1Z002 BASIC in
+MZ-2000 mode and SB-5520 in MZ-80B mode from tape, and Puckn Boy loaded from MZ-1Z002's monitor and played. The
+build uses 46% of the logic and 297/553 block RAMs at 85.9 MHz.
+
+Hardware tests: `tools/mister_test.py` runs on the MiSTer (a virtual keyboard on /dev/uinput, MGL loading and
+screenshots through /dev/MiSTer_cmd, OSD options through config/SharpMZ2500.CFG); `tools/mister_run.sh HOST
+tools/mister_tests/*.txt` runs the plans and fetches the screenshots; `tools/make_mgls.py` writes MGL launchers.
+The core prints a machine snapshot every 0.1 s on its UART (`cat /dev/ttyS1` at 115200 on the MiSTer).
+
+Keyboard: the map is positional (a Japanese MZ keyboard on PC keys, as in CSP), so on a US keyboard letters, digits
+and the control keys are as printed but symbols are not (e.g. `=`, `:` and `*` in BASIC).
 
 What exists (`rtl/`): Z80 (T80 v350) with CSP's wait states; the MMU and its reset maps; 256 KB main RAM and the IPL
 and the kanji ROM in SDRAM (the text raster fetches glyphs two cells ahead), ROMs from `boot.rom`; text CRTC and graphics controller with text VRAM, PCG and
