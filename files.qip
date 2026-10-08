@@ -13,6 +13,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/mz2500_fdc.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/rp5c15.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/mz2500_sio.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/mz2500_cmt.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/dbg_uart.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/wd1793.sv
 set_global_assignment -name VERILOG_FILE rtl/wd1793_mem.v
 

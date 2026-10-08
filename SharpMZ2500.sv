@@ -26,7 +26,7 @@ module emu
 
 assign ADC_BUS  = 'Z;
 assign USER_OUT = '1;
-assign {UART_RTS, UART_TXD, UART_DTR} = 0;
+assign {UART_RTS, UART_DTR} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 // SDRAM: main RAM, kanji and dictionary ROMs will live here (docs/design.md). Unused for now.
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;
@@ -95,6 +95,7 @@ localparam CONF_STR =
 // 85.909091 MHz = 24 x 3.579545 MHz (4 x the 21.477 MHz 400-line dot clock, 6 x the 14.318 MHz 200-line one).
 // The CPU (6 MHz), OPN (2 MHz) and 8253 clocks come from accumulators in rtl/mz2500.sv.
 wire clk_sys;
+wire clk_sdram;                  // clk_sys phase shifted: drives the SDRAM_CLK pin (see rtl/sdram.sv)
 wire pll_locked;
 
 pll pll
@@ -102,6 +103,7 @@ pll pll
 	.refclk(CLK_50M),
 	.rst(0),
 	.outclk_0(clk_sys),
+	.outclk_1(clk_sdram),
 	.locked(pll_locked)
 );
 
@@ -197,6 +199,7 @@ sdram sdram
 (
 	.init(~pll_locked),
 	.clk(clk_sys),
+	.clk_pin(clk_sdram),
 	.SDRAM_DQ(SDRAM_DQ), .SDRAM_A(SDRAM_A), .SDRAM_DQML(SDRAM_DQML), .SDRAM_DQMH(SDRAM_DQMH), .SDRAM_BA(SDRAM_BA),
 	.SDRAM_nCS(SDRAM_nCS), .SDRAM_nWE(SDRAM_nWE), .SDRAM_nRAS(SDRAM_nRAS), .SDRAM_nCAS(SDRAM_nCAS),
 	.SDRAM_CKE(SDRAM_CKE), .SDRAM_CLK(SDRAM_CLK),
@@ -209,9 +212,14 @@ sdram sdram
 	.ready(dram_ready)
 );
 
+// Debug channel: a snapshot of the machine every 0.1 s on UART TX (/dev/ttyS1 on the HPS, 115200 baud)
+wire [63:0] mz_dbg;
+dbg_uart dbg_uart (.clk(clk_sys), .value(mz_dbg), .tx(UART_TXD));
+
 mz2500 mz2500
 (
 	.clk_sys(clk_sys),
+	.dbg(mz_dbg),
 	.reset(reset),
 	.lines400(lines400),
 	.boot_mode(status[3:2] == 2'd3 ? 2'd0 : status[3:2]),

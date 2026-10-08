@@ -592,10 +592,8 @@ int Sim::run()
     top->ps2_key = 0;
     top->ioctl_download = 0; top->ioctl_wr = 0;
     for (int i = 0; i < 256; i++) clock();
-    // As on the MiSTer: the download holds the machine through ioctl_download, not through reset.
-    top->reset = 0;
+    // As on the MiSTer: Main holds the core in reset (status bit 0) while it sends boot.rom, then releases it.
     if (!load_roms()) return 2;
-    top->reset = 1;
     for (int i = 0; i < 256; i++) clock();
     top->reset = 0;
     for (int k = 0; k < 2; k++)

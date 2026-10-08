@@ -81,6 +81,7 @@ module mz2500
 	output [15:0] cpu_pc,
 	output        cpu_ce,
 	output        cpu_m1_n,
+	output [63:0] dbg,             // hardware debug snapshot (dbg_uart in the top level)
 	output reg    dbg_io_wr,
 	output reg [7:0] dbg_io_port,
 	output reg [7:0] dbg_io_data
@@ -204,6 +205,16 @@ T80s #(.Mode(0), .T2Write(1), .IOWait(1)) cpu
 
 assign cpu_pc   = cpu_a;
 assign cpu_m1_n = m1_n;
+
+// Debug snapshot: last opcode fetch address and byte, opcode fetch count, reset / wait / SDRAM client state, page 0
+reg [15:0] dbg_pc, dbg_m1cnt;
+reg  [7:0] dbg_op;
+reg        dbg_m1_d;
+always @(posedge clk_sys) begin
+	dbg_m1_d <= !m1_n && !mreq_n;
+	if (!m1_n && !mreq_n && !rd_n) begin dbg_pc <= cpu_a; dbg_op <= cpu_din; end
+	if (!m1_n && !mreq_n && !dbg_m1_d) dbg_m1cnt <= dbg_m1cnt + 16'd1;
+end
 
 // Bus cycles. T80se drives the strobes from CLKEN edges; each lasts at least one CPU clock (14 clk_sys), so
 // edges are seen here as level changes. Side effects are committed at the end of a cycle (the address and
@@ -389,12 +400,15 @@ always @(posedge clk_sys) begin
 	if (ld_kanji && ioctl_wr) begin
 		ld_pend <= 1'b1; ld_addr <= {5'd0, 2'b10, kanji_ld_addr}; ld_data <= ioctl_dout;
 	end
+	// Reset clears only the CPU side. MiSTer Main holds the core in reset (status bit 0) while it sends boot.rom, so
+	// download writes must go on, and an access in progress is left to finish (the controller always answers).
 	if (reset) begin
-		ram_st <= RAM_IDLE; ram_rd <= 1'b0; ram_we <= 1'b0; ram_wpend <= 1'b0; ld_pend <= 1'b0; ram_rdone <= 1'b0; cmt_rd_busy <= 1'b0;
+		ram_wpend <= 1'b0; ram_rdone <= 1'b0;
 	end
 end
 
 assign ioctl_wait = ld_pend || (ioctl_download && ram_st != RAM_IDLE);
+assign dbg = {dbg_pc, dbg_op, dbg_m1cnt, 1'b0, ram_st, sys_reset, cpu_reset, wait_n, ram_ready, 2'b00, page[0], ram_q};
 // The CPU waits for its SDRAM read, and on a write while the previous posted write hasn't been issued yet
 // (one-entry write buffer: a PUSH right behind a raster glyph fetch would otherwise overwrite the first byte).
 wire   ram_wait    = (mem_rd && ram_page && !ram_rdone) || (mem_wr && !cur_page[5] && ram_wpend);

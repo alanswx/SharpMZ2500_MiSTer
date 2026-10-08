@@ -1,0 +1,22 @@
+# MZ-2000 mode: MZ-1Z002 BASIC, then Puckn Boy from the monitor (MON, L, PUCKN BOY), then start the game
+cfg bootmode 2000
+load MZ-2000 BASIC + Puckn Boy (tape)
+wait 12
+key C
+wait 320
+shot puckn_basic
+type MON\n
+wait 2
+type L\n
+wait 2
+type PUCKN BOY\n
+wait 200
+shot puckn_title
+key ENTER
+wait 8
+shot puckn_game
+key KP4 0.5
+key KP8 0.5
+wait 3
+shot puckn_moved
+cfg bootmode 2500

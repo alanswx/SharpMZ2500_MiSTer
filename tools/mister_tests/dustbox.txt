@@ -1,0 +1,117 @@
+# Dust Box (Hoshikuzu-bako) 1-16 and Special 1-3: title after 45 s, then after Enter
+cfg bootmode 2500
+cfg lines 400
+load Dust Box Vol 01
+wait 45
+shot db_01_title
+key ENTER
+wait 15
+shot db_01_enter
+load Dust Box Vol 02
+wait 45
+shot db_02_title
+key ENTER
+wait 15
+shot db_02_enter
+load Dust Box Vol 03
+wait 45
+shot db_03_title
+key ENTER
+wait 15
+shot db_03_enter
+load Dust Box Vol 04
+wait 45
+shot db_04_title
+key ENTER
+wait 15
+shot db_04_enter
+load Dust Box Vol 05
+wait 45
+shot db_05_title
+key ENTER
+wait 15
+shot db_05_enter
+load Dust Box Vol 06
+wait 45
+shot db_06_title
+key ENTER
+wait 15
+shot db_06_enter
+load Dust Box Vol 07
+wait 45
+shot db_07_title
+key ENTER
+wait 15
+shot db_07_enter
+load Dust Box Vol 08
+wait 45
+shot db_08_title
+key ENTER
+wait 15
+shot db_08_enter
+load Dust Box Vol 09
+wait 45
+shot db_09_title
+key ENTER
+wait 15
+shot db_09_enter
+load Dust Box Vol 10
+wait 45
+shot db_10_title
+key ENTER
+wait 15
+shot db_10_enter
+load Dust Box Vol 11
+wait 45
+shot db_11_title
+key ENTER
+wait 15
+shot db_11_enter
+load Dust Box Vol 12
+wait 45
+shot db_12_title
+key ENTER
+wait 15
+shot db_12_enter
+load Dust Box Vol 13
+wait 45
+shot db_13_title
+key ENTER
+wait 15
+shot db_13_enter
+load Dust Box Vol 14
+wait 45
+shot db_14_title
+key ENTER
+wait 15
+shot db_14_enter
+load Dust Box Vol 15
+wait 45
+shot db_15_title
+key ENTER
+wait 15
+shot db_15_enter
+load Dust Box Vol 16
+wait 45
+shot db_16_title
+key ENTER
+wait 15
+shot db_16_enter
+load Dust Box Special Vol 01
+wait 45
+shot db_sp01_title
+key ENTER
+wait 15
+shot db_sp01_enter
+load Dust Box Special Vol 02
+wait 45
+shot db_sp02_title
+key ENTER
+wait 15
+shot db_sp02_enter
+load Dust Box Special Vol 03
+wait 45
+shot db_sp03_title
+key ENTER
+wait 15
+shot db_sp03_enter

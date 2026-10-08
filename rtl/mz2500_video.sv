@@ -466,13 +466,24 @@ wire  [8:0] gy = gfx400 ? yb : {1'b0, yb[8:1]};
 // li for 20-row mode: ys - row*20 (row*20 = row*16 + row*4)
 wire  [8:0] li20 = ys[8:0] - ({3'd0, row} << 4) - ({3'd0, row} << 2);
 
+// MZ-2000/80B row and line products, registered every clock (yb is stable long before hc == 1): keeps the
+// multiplications out of the per-line setup path
+reg [10:0] c_row80, c_row40;
+reg [14:0] c_y80, c_y40;
+always @(posedge clk) begin
+	c_row80 <= {yb[8:4], 6'd0} + {yb[8:4], 4'd0};
+	c_row40 <= {yb[8:4], 5'd0} + {yb[8:4], 3'd0};
+	c_y80   <= {yb[8:1], 6'd0} + {yb[8:1], 4'd0};
+	c_y40   <= {yb[8:1], 5'd0} + {yb[8:1], 3'd0};
+end
+
 always @(posedge clk) begin
 	if (ce_pix && hc == 10'd1 && y_act) begin
 		if (compat) begin
 			t_rowok <= 1'b1;
 			t_gl    <= {1'b0, yb[3:1]};                                        // y200 & 7
-			t_base  <= column80 ? ({yb[8:4], 6'd0} + {yb[8:4], 4'd0}) : ({yb[8:4], 5'd0} + {yb[8:4], 3'd0});   // row * 80 / 40
-			c_gbase <= compat80b ? ({yb[8:1], 5'd0} + {yb[8:1], 3'd0}) : ({yb[8:1], 6'd0} + {yb[8:1], 4'd0}); // y200 * 40 / 80
+			t_base  <= column80 ? c_row80 : c_row40;     // row * 80 / 40
+			c_gbase <= compat80b ? c_y40 : c_y80;        // y200 * 40 / 80
 		end
 		else begin
 			t_rowok <= (ys >= 0) && (rows20 ? (li20 < 9'd16) : 1'b1);

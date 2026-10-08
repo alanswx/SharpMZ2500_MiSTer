@@ -33,6 +33,7 @@ module sdram
 (
    input             init,        // reset to initialize RAM
    input             clk,         // clock ~100MHz
+   input             clk_pin,     // clk with a phase shift, for the SDRAM_CLK pin
                                   //
                                   // SDRAM_* - signals to the MT48LC16M16 chip
    inout  reg [15:0] SDRAM_DQ,    // 16 bit bidirectional data bus
@@ -232,7 +233,7 @@ sdramclk_ddr
 (
 	.datain_h(1'b0),
 	.datain_l(1'b1),
-	.outclock(clk),
+	.outclock(clk_pin),
 	.dataout(SDRAM_CLK),
 	.aclr(1'b0),
 	.aset(1'b0),

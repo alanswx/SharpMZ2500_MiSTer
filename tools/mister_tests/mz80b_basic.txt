@@ -1,0 +1,11 @@
+# MZ-80B mode: SB-5520 BASIC from tape, then type a program
+cfg bootmode 80b
+load MZ-80B BASIC SB-5520 (tape)
+wait 12
+key C
+wait 260
+shot mz80b_ready
+type PRINT "HELLO MZ-80B",12*34\n
+wait 3
+shot mz80b_print
+cfg bootmode 2500

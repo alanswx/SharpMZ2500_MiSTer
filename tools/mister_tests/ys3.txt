@@ -1,0 +1,16 @@
+# Ys III (program disk in drive 1, user disk in drive 2): intro, then Enter/Space through the title
+cfg bootmode 2500
+cfg lines 400
+load Ys III
+wait 20
+shot ys3_20s
+wait 25
+shot ys3_45s
+key SPACE
+wait 10
+shot ys3_space
+key ENTER
+wait 20
+shot ys3_enter
+wait 30
+shot ys3_later

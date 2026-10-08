@@ -1,0 +1,11 @@
+# IPL with no disk, 400 and 200 lines: the "Press F or C" menu
+cfg bootmode 2500
+cfg lines 400
+load core
+wait 10
+shot ipl_400
+cfg lines 200
+load core
+wait 10
+shot ipl_200
+cfg lines 400
