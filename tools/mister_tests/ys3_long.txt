@@ -1,0 +1,20 @@
+# Ys III: let the intro run out, then see what follows; Enter / Space after it
+cfg bootmode 2500
+load Ys III
+wait 60
+shot ys3l_060
+wait 30
+shot ys3l_090
+wait 30
+shot ys3l_120
+wait 30
+shot ys3l_150
+key ENTER
+wait 10
+shot ys3l_enter1
+key SPACE
+wait 10
+shot ys3l_space1
+key ENTER
+wait 20
+shot ys3l_enter2

@@ -17,8 +17,11 @@ Steps:
   type TEXT          type text; \\n = Enter. Upper case letters are sent as plain keys (the MZ is upper case)
   shot NAME          screenshot (MiSTer saves NAME.png under screenshots/<core>/)
   osd                F12 (open/close the OSD)
+  mouse DX DY        move the virtual mouse (relative, in steps of at most 10)
+  click [left|right] [HOLD]  mouse button
+  joy NAME [HOLD]    gamepad: up, down, left, right, a, b (held HOLD seconds, default 0.3)
   cfg OPTION VALUE   set an OSD option in config/SharpMZ2500.CFG before a load (Main reads it when the core
-                     starts): bootmode 2500|2000|80b, lines 400|200
+                     starts): bootmode 2500|2000|80b, lines 400|200, keyboard jp|us
 
 Key names: A-Z, 0-9, ENTER, SPACE, ESC, BACKSPACE, TAB, UP, DOWN, LEFT, RIGHT, F1-F12, LEFTSHIFT, LEFTCTRL,
 LEFTALT, MINUS, EQUAL, COMMA, DOT, SLASH, SEMICOLON, APOSTROPHE, KP0-KP9, KPENTER, HOME, END, INSERT, DELETE,
@@ -41,18 +44,24 @@ for i, c in enumerate('1234567890'):
 for row, start in (('QWERTYUIOP', 16), ('ASDFGHJKL', 30), ('ZXCVBNM', 44)):
     for i, c in enumerate(row):
         KEYS[c] = start + i
-# characters that need shift on a US keyboard (MiSTer Main sends US PS/2 codes; the core maps them)
-SHIFTED = {'"': '2', '!': '1', '#': '3', '$': '4', '%': '5', '&': '7', '(': '9', ')': '0', '*': '8', '+': 'EQUAL',
-           ':': 'SEMICOLON', '<': 'COMMA', '>': 'DOT', '?': 'SLASH', '_': 'MINUS', '@': '2'}
+# characters as typed on a US keyboard (Main sends US PS/2 codes; the core's Keyboard option decides what the MZ sees)
+SHIFTED = {'!': '1', '@': '2', '#': '3', '$': '4', '%': '5', '^': '6', '&': '7', '*': '8', '(': '9', ')': '0',
+           '_': 'MINUS', '+': 'EQUAL', '{': 'LEFTBRACE', '}': 'RIGHTBRACE', '|': 'BACKSLASH', ':': 'SEMICOLON',
+           '"': 'APOSTROPHE', '~': 'GRAVE', '<': 'COMMA', '>': 'DOT', '?': 'SLASH'}
 PLAIN = {' ': 'SPACE', '\n': 'ENTER', '-': 'MINUS', '=': 'EQUAL', ',': 'COMMA', '.': 'DOT', '/': 'SLASH',
-         ';': 'SEMICOLON', "'": 'APOSTROPHE'}
+         ';': 'SEMICOLON', "'": 'APOSTROPHE', '[': 'LEFTBRACE', ']': 'RIGHTBRACE', '`': 'GRAVE', '\\': 'BACKSLASH'}
 
-EV_SYN, EV_KEY = 0, 1
+EV_SYN, EV_KEY, EV_REL, EV_ABS = 0, 1, 2, 3
 UI_SET_EVBIT, UI_SET_KEYBIT, UI_DEV_CREATE, UI_DEV_DESTROY = 0x40045564, 0x40045565, 0x5501, 0x5502
+UI_SET_RELBIT, UI_SET_ABSBIT = 0x40045566, 0x40045567
+BTN_LEFT, BTN_RIGHT = 0x110, 0x111
+BTN_SOUTH, BTN_EAST, BTN_START, BTN_SELECT = 0x130, 0x131, 0x13B, 0x13A
+ABS_X, ABS_Y = 0, 1
 MGL_DIR = '/media/fat/_Computer/_SharpMZ2500'
 CFG = '/media/fat/config/SharpMZ2500.CFG'
 # OSD options as status bits (CONF_STR in SharpMZ2500.sv): name -> (low bit, width, {value: field})
-OPTIONS = {'bootmode': (2, 2, {'2500': 0, '2000': 1, '80b': 2}), 'lines': (1, 1, {'400': 0, '200': 1})}
+OPTIONS = {'bootmode': (2, 2, {'2500': 0, '2000': 1, '80b': 2}), 'lines': (1, 1, {'400': 0, '200': 1}),
+           'keyboard': (7, 1, {'jp': 0, 'us': 1})}
 
 
 def set_option(name, value):
@@ -67,18 +76,89 @@ def set_option(name, value):
     open(CFG, 'wb').write(v.to_bytes(16, 'little'))
 
 
+def uinput_device(name, product, keys=(), rels=(), abss=()):
+    fd = os.open('/dev/uinput', os.O_WRONLY | os.O_NONBLOCK)
+    fcntl.ioctl(fd, UI_SET_EVBIT, EV_SYN)
+    if keys:
+        fcntl.ioctl(fd, UI_SET_EVBIT, EV_KEY)
+        for code in keys:
+            fcntl.ioctl(fd, UI_SET_KEYBIT, code)
+    if rels:
+        fcntl.ioctl(fd, UI_SET_EVBIT, EV_REL)
+        for code in rels:
+            fcntl.ioctl(fd, UI_SET_RELBIT, code)
+    absmax, absmin = [0] * 64, [0] * 64
+    if abss:
+        fcntl.ioctl(fd, UI_SET_EVBIT, EV_ABS)
+        for code in abss:
+            fcntl.ioctl(fd, UI_SET_ABSBIT, code)
+            absmin[code], absmax[code] = -32767, 32767
+    # struct uinput_user_dev: name[80], input_id (bustype, vendor, product, version), ff_effects_max, abs[4][64]
+    dev = struct.pack('80sHHHHi', name.encode(), 0x03, 0x1209, product, 1, 0)
+    dev += struct.pack('64i', *absmax) + struct.pack('64i', *absmin) + b'\0' * (2 * 64 * 4)
+    os.write(fd, dev)
+    fcntl.ioctl(fd, UI_DEV_CREATE)
+    return fd
+
+
+class Device:
+    def __init__(self, fd):
+        self.fd = fd
+
+    def ev(self, typ, code, val):
+        t = time.time()
+        os.write(self.fd, struct.pack('llHHi', int(t), int((t % 1) * 1e6), typ, code, val))
+
+    def syn(self):
+        self.ev(EV_SYN, 0, 0)
+
+    def close(self):
+        self.mouse.close()
+        self.pad.close()
+        fcntl.ioctl(self.fd, UI_DEV_DESTROY)
+        os.close(self.fd)
+
+
+class Mouse(Device):
+    def __init__(self):
+        super().__init__(uinput_device('mister_test mouse', 0x2501, keys=(BTN_LEFT, BTN_RIGHT), rels=(0, 1)))
+
+    def move(self, dx, dy):
+        while dx or dy:
+            sx = max(-10, min(10, dx)); sy = max(-10, min(10, dy))
+            self.ev(EV_REL, 0, sx); self.ev(EV_REL, 1, sy); self.syn()
+            dx -= sx; dy -= sy
+            time.sleep(0.02)
+
+    def click(self, button, hold):
+        self.ev(EV_KEY, button, 1); self.syn(); time.sleep(hold)
+        self.ev(EV_KEY, button, 0); self.syn(); time.sleep(0.1)
+
+
+class Pad(Device):
+    def __init__(self):
+        super().__init__(uinput_device('mister_test pad', 0x2502, keys=(BTN_SOUTH, BTN_EAST, BTN_START, BTN_SELECT),
+                                       abss=(ABS_X, ABS_Y)))
+
+    def press(self, name, hold):
+        axis = {'left': (ABS_X, -32767), 'right': (ABS_X, 32767), 'up': (ABS_Y, -32767), 'down': (ABS_Y, 32767)}
+        if name in axis:
+            code, v = axis[name]
+            self.ev(EV_ABS, code, v); self.syn(); time.sleep(hold)
+            self.ev(EV_ABS, code, 0); self.syn()
+        else:
+            code = {'a': BTN_SOUTH, 'b': BTN_EAST, 'start': BTN_START, 'select': BTN_SELECT}[name]
+            self.ev(EV_KEY, code, 1); self.syn(); time.sleep(hold)
+            self.ev(EV_KEY, code, 0); self.syn()
+        time.sleep(0.1)
+
+
 class Keyboard:
     def __init__(self):
-        self.fd = os.open('/dev/uinput', os.O_WRONLY | os.O_NONBLOCK)
-        fcntl.ioctl(self.fd, UI_SET_EVBIT, EV_KEY)
-        fcntl.ioctl(self.fd, UI_SET_EVBIT, EV_SYN)
-        for code in range(1, 256):
-            fcntl.ioctl(self.fd, UI_SET_KEYBIT, code)
-        # struct uinput_user_dev: name[80], input_id (bustype, vendor, product, version), ff_effects_max, abs[4][64]
-        dev = struct.pack('80sHHHHi', b'mister_test keyboard', 0x03, 0x1209, 0x2500, 1, 0) + b'\0' * (4 * 64 * 4)
-        os.write(self.fd, dev)
-        fcntl.ioctl(self.fd, UI_DEV_CREATE)
-        time.sleep(2.0)   # let Main find the new device
+        self.fd = uinput_device('mister_test keyboard', 0x2500, keys=range(1, 256))
+        self.mouse = Mouse()
+        self.pad = Pad()
+        time.sleep(2.0)   # let Main find the new devices
 
     def _ev(self, typ, code, val):
         t = time.time()
@@ -147,6 +227,16 @@ def run(steps, kb):
         elif op == 'shot':
             cmd('screenshot ' + arg)
             time.sleep(1.5)
+        elif op == 'mouse':
+            dx, dy = arg.split()
+            kb.mouse.move(int(dx), int(dy))
+        elif op == 'click':
+            parts = arg.split()
+            btn = BTN_RIGHT if parts and parts[0] == 'right' else BTN_LEFT
+            kb.mouse.click(btn, float(parts[1]) if len(parts) > 1 else 0.1)
+        elif op == 'joy':
+            parts = arg.split()
+            kb.pad.press(parts[0].lower(), float(parts[1]) if len(parts) > 1 else 0.3)
         elif op == 'cfg':
             name, value = arg.split()
             set_option(name.lower(), value)

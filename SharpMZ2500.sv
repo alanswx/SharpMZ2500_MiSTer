@@ -80,6 +80,7 @@ localparam CONF_STR =
 	"-;",
 	"O[1],Lines (front switch),400 (24 kHz),200 (15 kHz);",
 	"O[3:2],Boot mode (reset),MZ-2500,MZ-2000,MZ-80B;",
+	"O[7],Keyboard,Japanese (positional),US (symbols);",
 	"-;",
 	"J1,Trigger A,Trigger B;",
 	"O[6:5],Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
@@ -220,6 +221,7 @@ mz2500 mz2500
 (
 	.clk_sys(clk_sys),
 	.dbg(mz_dbg),
+	.kbd_us(status[7]),
 	.reset(reset),
 	.lines400(lines400),
 	.boot_mode(status[3:2] == 2'd3 ? 2'd0 : status[3:2]),

@@ -25,6 +25,7 @@ module top(
    output [15:0] AUDIO_R /*verilator public_flat*/,
 
    input  [10:0] ps2_key,
+   input         kbd_us,
    input  [24:0] ps2_mouse,
    input         dbg_dump,       // one clock: write main RAM to out/ram_dump.hex and print the MMU pages
 
@@ -81,6 +82,7 @@ mz2500 mz2500
    .lines400(lines400),
    .boot_mode(boot_mode),
    .ps2_key(ps2_key),
+   .kbd_us(kbd_us),
    .joy0(6'd0), .joy1(6'd0), .ps2_mouse(ps2_mouse),
    // fixed RTC so runs are reproducible: 1990-04-01 (Sunday) 12:00:00
    .rtc({1'b0, 8'h00, 8'h00, 8'h90, 8'h04, 8'h01, 8'h12, 8'h00, 8'h00}),

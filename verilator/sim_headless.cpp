@@ -43,6 +43,7 @@ struct Options {
     uint32_t    stop_frame = 60;
     bool        quiet = false;
     std::set<uint32_t> screenshots;       // --screenshot N
+    bool        kbd_us = false;          // --kbd-us: US symbol keyboard layout (OSD option)
     bool        dump_range = false;
     uint32_t    dump_from = 0, dump_to = 0;
     uint32_t    dump_every = 0;
@@ -75,6 +76,7 @@ static void usage()
 "  --lines 400|200        front-panel display switch (default 400: 24.86 kHz; 200: 15.98 kHz)\n"
 "  --stop-at-frame N      exit after frame N (default 60)\n"
 "  --quiet                no progress on stderr\n"
+"  --kbd-us               keyboard: US symbol layout (the OSD option)\n"
 "  --type FRAME:TEXT      type TEXT from FRAME; \\n or {RETURN}, {BREAK}, {DEL}, {WAITn} ...\n"
 "  --type-rate P:R        frames per key press:release (default 3:3)\n"
 "  --screenshot N         PNG of frame N (repeatable)\n"
@@ -113,6 +115,7 @@ static bool parse_args(int argc, char **argv, Options &o)
         else if (a == "--lines") o.lines400 = next() != "200";
         else if (a == "--stop-at-frame") o.stop_frame = parse_num(next());
         else if (a == "--quiet") o.quiet = true;
+        else if (a == "--kbd-us") o.kbd_us = true;
         else if (a == "--type") {
             std::string s = next();
             size_t c = s.find(':');
@@ -590,6 +593,7 @@ int Sim::run()
     top->lines400 = opt.lines400;
     top->boot_mode = opt.boot_mode;
     top->ps2_key = 0;
+    top->kbd_us = opt.kbd_us;
     top->ioctl_download = 0; top->ioctl_wr = 0;
     for (int i = 0; i < 256; i++) clock();
     // As on the MiSTer: Main holds the core in reset (status bit 0) while it sends boot.rom, then releases it.

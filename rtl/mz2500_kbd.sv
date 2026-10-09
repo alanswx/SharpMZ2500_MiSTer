@@ -10,6 +10,10 @@
 // Delete/Insert = INST/DEL, Alt = GRAPH, Caps Lock = LOCK, Left GUI or the JP Kanji key = LOGO,
 // JP Kana / Muhenkan / Henkan keys as themselves.
 //
+// us_layout (OSD): the symbol keys of a US keyboard type their printed symbol. A symbol whose MZ key or shift
+// state differs (e.g. '=' is SHIFT + '-', '@' is the unshifted '@' key) presses that MZ key and forces the MZ
+// SHIFT line to what the symbol needs while it is held. One such key is tracked at a time.
+//
 // Copyright (C) 2026 Alan Steremberg. GPL-3.0-or-later (see LICENSE).
 //=======================================================================================================
 
@@ -18,6 +22,7 @@ module mz2500_kbd
 	input            clk,
 	input            reset,
 	input     [10:0] ps2_key,      // [10] toggles per event, [9] pressed, [8] extended, [7:0] code
+	input            us_layout,    // 1: US symbols (see above), 0: positional JIS
 	input      [4:0] column,       // Z80 PIO port A bits 4-0
 	output     [7:0] data          // active low key bits
 );
@@ -147,24 +152,82 @@ always @(*) begin
 	end
 end
 
+// US layout: (code, shift) -> MZ row, bit and the SHIFT state the MZ needs
+reg        us_hit, us_shift;
+reg  [3:0] us_row;
+reg  [2:0] us_bit;
+wire       shift_held = !keys[11][2];
+always @(*) begin
+	us_hit = 1'b1; us_row = 4'd0; us_bit = 3'd0; us_shift = 1'b0;
+	if (ps2_key[8]) us_hit = 1'b0;
+	else if (!shift_held)
+		case (ps2_key[7:0])
+			8'h55: begin us_row = 4'd9; us_bit = 3'd4; us_shift = 1'b1; end   // =  : SHIFT -
+			8'h5D: begin us_row = 4'd7; us_bit = 3'd4; us_shift = 1'b0; end   // \  : yen
+			8'h52: begin us_row = 4'd8; us_bit = 3'd7; us_shift = 1'b1; end   // '  : SHIFT 7
+			8'h0E: begin us_row = 4'd9; us_bit = 3'd5; us_shift = 1'b1; end   // `  : SHIFT @
+			8'h4C: begin us_row = 4'd9; us_bit = 3'd3; us_shift = 1'b0; end   // ;
+			default: us_hit = 1'b0;
+		endcase
+	else
+		case (ps2_key[7:0])
+			8'h1E: begin us_row = 4'd9; us_bit = 3'd5; us_shift = 1'b0; end   // @
+			8'h36: begin us_row = 4'd7; us_bit = 3'd3; us_shift = 1'b0; end   // ^
+			8'h3D: begin us_row = 4'd8; us_bit = 3'd6; us_shift = 1'b1; end   // &  : SHIFT 6
+			8'h3E: begin us_row = 4'd9; us_bit = 3'd2; us_shift = 1'b1; end   // *  : SHIFT :
+			8'h46: begin us_row = 4'd9; us_bit = 3'd0; us_shift = 1'b1; end   // (  : SHIFT 8
+			8'h45: begin us_row = 4'd9; us_bit = 3'd1; us_shift = 1'b1; end   // )  : SHIFT 9
+			8'h4E: begin us_row = 4'd7; us_bit = 3'd5; us_shift = 1'b0; end   // _
+			8'h55: begin us_row = 4'd9; us_bit = 3'd3; us_shift = 1'b1; end   // +  : SHIFT ;
+			8'h5D: begin us_row = 4'd7; us_bit = 3'd4; us_shift = 1'b1; end   // |  : SHIFT yen
+			8'h4C: begin us_row = 4'd9; us_bit = 3'd2; us_shift = 1'b0; end   // :
+			8'h52: begin us_row = 4'd8; us_bit = 3'd2; us_shift = 1'b1; end   // "  : SHIFT 2
+			8'h0E: begin us_row = 4'd7; us_bit = 3'd3; us_shift = 1'b1; end   // ~  : SHIFT ^
+			default: us_hit = 1'b0;
+		endcase
+end
+
+reg        sym_held, sym_shift;
+reg  [7:0] sym_code;
+reg  [3:0] sym_row;
+reg  [2:0] sym_bit;
+
 always @(posedge clk) begin
 	if (reset) begin
 		for (int r = 0; r < 14; r++) keys[r] <= 8'hFF;
 		toggle_d <= ps2_key[10];
+		sym_held <= 1'b0;
 	end
 	else begin
 		toggle_d <= ps2_key[10];
-		if (ps2_key[10] != toggle_d && row != 4'd15)
-			keys[row][bit_n] <= ~ps2_key[9];
+		if (ps2_key[10] != toggle_d) begin
+			if (sym_held && !ps2_key[8] && ps2_key[7:0] == sym_code) begin
+				// the translated key: release what was pressed for it (shift may have changed since)
+				if (!ps2_key[9]) begin keys[sym_row][sym_bit] <= 1'b1; sym_held <= 1'b0; end
+			end
+			else if (us_layout && us_hit && ps2_key[9]) begin
+				if (sym_held) keys[sym_row][sym_bit] <= 1'b1;
+				keys[us_row][us_bit] <= 1'b0;
+				sym_held <= 1'b1; sym_code <= ps2_key[7:0]; sym_row <= us_row; sym_bit <= us_bit; sym_shift <= us_shift;
+			end
+			else if (row != 4'd15)
+				keys[row][bit_n] <= ~ps2_key[9];
+		end
 	end
 end
+
+// the MZ SHIFT line: forced while a translated symbol is held
+function [7:0] row_out(input [3:0] r);
+	row_out = keys[r];
+	if (r == 4'd11 && sym_held) row_out[2] = ~sym_shift;
+endfunction
 
 reg [7:0] all_rows;
 always @(*) begin
 	all_rows = 8'hFF;
-	for (int r = 0; r < 14; r++) all_rows = all_rows & keys[r];
+	for (int r = 0; r < 14; r++) all_rows = all_rows & row_out(r[3:0]);
 end
 
-assign data = column[4] ? ((column[3:0] < 4'd14) ? keys[column[3:0]] : 8'hFF) : all_rows;
+assign data = column[4] ? ((column[3:0] < 4'd14) ? row_out(column[3:0]) : 8'hFF) : all_rows;
 
 endmodule

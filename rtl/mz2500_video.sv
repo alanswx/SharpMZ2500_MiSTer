@@ -447,11 +447,31 @@ reg         t_rowok;           // this line belongs to a drawn glyph line
 reg   [3:0] t_gl;              // glyph line 0-15 (16-line font) / 0-7 (8-line font)
 reg  [10:0] t_base;            // address of the row's first cell
 
-wire signed [10:0] ys  = $signed({2'b00, yb}) + $signed({6'd0, vd}) - (rows20 ? 11'sd2 : 11'sd0);
-wire        [18:0] ys205 = ys[9:0] * 9'd205;
-wire         [5:0] row = rows20 ? ys205[17:12] : ys[9:4];
-// row * 80 / row * 40
-wire        [10:0] rowoff = column80 ? ({row, 6'd0} + {row, 4'd0}) : ({row, 5'd0} + {row, 3'd0});
+// Text row and glyph line of the current line, as a pipeline running every clock: yb changes at the end of a
+// line and the setup below loads the results at hc == 1, at least 8 clocks later (4 stages here).
+reg signed [10:0] ys;                     // stage 1
+reg        [18:0] ys205;                  // stage 2: ys * 205 (/ 20 for the 20-row mode)
+reg signed [10:0] ys_2, ys_3;
+reg         [5:0] row;                    // stage 3 inputs
+reg         [8:0] li20;                   // li for 20-row mode: ys - row*20 (row*20 = row*16 + row*4)
+reg        [10:0] rowoff;                 // row * 80 / row * 40
+reg               n_rowok;
+reg         [3:0] n_gl;
+reg        [10:0] n_base;
+wire        [5:0] row_c = rows20 ? ys205[17:12] : ys_2[9:4];
+wire        [8:0] li20_c = ys_2[8:0] - ({3'd0, row_c} << 4) - ({3'd0, row_c} << 2);
+always @(posedge clk) begin
+	ys      <= $signed({2'b00, yb}) + $signed({6'd0, vd}) - (rows20 ? 11'sd2 : 11'sd0);
+	ys205   <= ys[9:0] * 9'd205;
+	ys_2    <= ys;
+	ys_3    <= ys_2;
+	row     <= row_c;
+	li20    <= li20_c;
+	rowoff  <= column80 ? ({row_c, 6'd0} + {row_c, 4'd0}) : ({row_c, 5'd0} + {row_c, 3'd0});
+	n_rowok <= (ys_3 >= 0) && (rows20 ? (li20 < 9'd16) : 1'b1);
+	n_gl    <= font8 ? {1'b0, (rows20 ? li20[3:1] : ys_3[3:1])} : (rows20 ? li20[3:0] : ys_3[3:0]);
+	n_base  <= tsa + rowoff;
+end
 
 reg  [14:0] g_chain, g_line_start;
 reg  [14:0] c_gbase;              // MZ-2000/80B: graphics address of the line
@@ -463,8 +483,6 @@ reg   [8:0] g_gy_prev;
 reg         g_hsc;              // this line uses the horizontal scroll (y < SLN1)
 wire  [8:0] gy = gfx400 ? yb : {1'b0, yb[8:1]};
 
-// li for 20-row mode: ys - row*20 (row*20 = row*16 + row*4)
-wire  [8:0] li20 = ys[8:0] - ({3'd0, row} << 4) - ({3'd0, row} << 2);
 
 // MZ-2000/80B row and line products, registered every clock (yb is stable long before hc == 1): keeps the
 // multiplications out of the per-line setup path
@@ -486,9 +504,9 @@ always @(posedge clk) begin
 			c_gbase <= compat80b ? c_y40 : c_y80;        // y200 * 40 / 80
 		end
 		else begin
-			t_rowok <= (ys >= 0) && (rows20 ? (li20 < 9'd16) : 1'b1);
-			t_gl    <= font8 ? {1'b0, (rows20 ? li20[3:1] : ys[3:1])} : (rows20 ? li20[3:0] : ys[3:0]);
-			t_base  <= tsa + rowoff;
+			t_rowok <= n_rowok;
+			t_gl    <= n_gl;
+			t_base  <= n_base;
 		end
 
 		if (yo == 0) begin

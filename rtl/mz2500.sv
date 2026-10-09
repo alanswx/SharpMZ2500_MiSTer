@@ -81,6 +81,7 @@ module mz2500
 	output [15:0] cpu_pc,
 	output        cpu_ce,
 	output        cpu_m1_n,
+	input         kbd_us,          // keyboard: US symbols instead of the positional JIS layout
 	output [63:0] dbg,             // hardware debug snapshot (dbg_uart in the top level)
 	output reg    dbg_io_wr,
 	output reg [7:0] dbg_io_port,
@@ -169,6 +170,11 @@ wire [15:0] cpu_a;
 wire  [7:0] cpu_dout;
 wire        mreq_n, iorq_n, rd_n, wr_n, m1_n;
 reg   [7:0] cpu_din;
+// The read data is registered once before the T80: it samples DI at least one T-state (14 clk_sys) after the
+// address and strobes go out, so the extra clock is invisible, and the VRAM block RAM outputs and the read
+// multiplexer get a clock of their own instead of sharing one with the T80's decoder (the critical path).
+reg   [7:0] cpu_din_r;
+always @(posedge clk_sys) cpu_din_r <= cpu_din;
 wire        int_n;
 wire        sio_int_n, sio_ack_mine, sio_ieo, sio_sel;   // Z80 SIO (below)
 wire  [7:0] sio_vector, sio_dout;
@@ -199,7 +205,7 @@ T80s #(.Mode(0), .T2Write(1), .IOWait(1)) cpu
 	.HALT_n(),
 	.BUSAK_n(),
 	.A(cpu_a),
-	.DI(cpu_din),
+	.DI(cpu_din_r),
 	.DO(cpu_dout)
 );
 
@@ -411,7 +417,11 @@ assign ioctl_wait = ld_pend || (ioctl_download && ram_st != RAM_IDLE);
 assign dbg = {dbg_pc, dbg_op, dbg_m1cnt, 1'b0, ram_st, sys_reset, cpu_reset, wait_n, ram_ready, 2'b00, page[0], ram_q};
 // The CPU waits for its SDRAM read, and on a write while the previous posted write hasn't been issued yet
 // (one-entry write buffer: a PUSH right behind a raster glyph fetch would otherwise overwrite the first byte).
-wire   ram_wait    = (mem_rd && ram_page && !ram_rdone) || (mem_wr && !cur_page[5] && ram_wpend);
+// The read releases WAIT one clock after ram_q is loaded: T80s latches DI on the clock enable where it sees WAIT
+// high in T2, and DI is registered once (cpu_din_r).
+reg    ram_rdone_d;
+always @(posedge clk_sys) ram_rdone_d <= ram_rdone;
+wire   ram_wait    = (mem_rd && ram_page && !(ram_rdone && ram_rdone_d)) || (mem_wr && !cur_page[5] && ram_wpend);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Video
@@ -802,6 +812,7 @@ mz2500_kbd kbd
 	.clk(clk_sys),
 	.reset(reset),
 	.ps2_key(ps2_key),
+	.us_layout(kbd_us),
 	.column(pio_pa[4:0]),
 	.data(kbd_data)
 );

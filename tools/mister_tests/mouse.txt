@@ -1,0 +1,15 @@
+# Mouse: Dust Box vol.4 menu has a pointer (Z80 SIO, OPN port A bit 3 selects the mouse)
+cfg bootmode 2500
+load Dust Box Vol 04
+wait 45
+key ENTER
+wait 15
+shot mouse_before
+mouse 120 0
+wait 1
+mouse 0 80
+wait 2
+shot mouse_moved
+click left
+wait 10
+shot mouse_click

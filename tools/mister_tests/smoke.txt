@@ -1,0 +1,13 @@
+# Quick check after a new build: IPL menu, Dust Box 1 title and its first message
+cfg bootmode 2500
+cfg lines 400
+cfg keyboard jp
+load core
+wait 10
+shot smoke_ipl
+load Dust Box Vol 01
+wait 45
+shot smoke_db01
+key ENTER
+wait 10
+shot smoke_db01_enter

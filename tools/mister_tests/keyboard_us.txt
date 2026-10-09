@@ -1,0 +1,16 @@
+# US keyboard layout (OSD Keyboard = US): every symbol in MZ-2000 BASIC
+cfg bootmode 2000
+cfg keyboard us
+load MZ-2000 BASIC MZ-1Z001 (tape)
+wait 12
+key C
+wait 260
+shot kbd_ready
+type PRINT "!#$%&'()=-~^|@`[]{};:+*<>,./?_"\n
+wait 2
+type 10 FOR I=1 TO 3:PRINT I*2,I+1,I/2:NEXT\n
+type RUN\n
+wait 3
+shot kbd_us
+cfg keyboard jp
+cfg bootmode 2500
