@@ -150,10 +150,9 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 - [x] Project A (MZ-2000) plays on hardware: the IPL rewinds for half a second after loading and the loader then
       presses PLAY; the player rewound instantly to the top, so the loader read PROJECT A's data as DATA. Rewind now
       winds over time (4 s per record, back to the start of the current record first; APSS: one record at once)
-- [ ] Tape recording (MIC, 8255 PC7): needs a writable tape image (an S slot, as SharpMZ_MiSTer's tape_image.sv;
-      Main has no generic upload): a pulse decoder for the MZ-80B/2000 and MZ-2500 formats, records appended through
-      sd_wr, and playback from that slot
-- [ ] Tape recording (MIC, PC7), the SharpMZ_MiSTer image-append approach
+- [ ] Tape recording (SAVE to tape): not supported, by decision (2026-10-09). Deferred until MiSTer supports growing
+      tape images; then it needs a decoder for the MIC signal (8255 PC7) in the MZ-80B/2000 and MZ-2500 formats and
+      recorded records appended to the image. Playback from MZT images is complete.
 
 ## Phase 11: SDRAM
 
