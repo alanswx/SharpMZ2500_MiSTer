@@ -141,11 +141,15 @@ CPU trace from reset matching the reference emulator for the first few thousand 
       MZ-80B/2000 MZT encodings, REW/FF/PLAY/STOP edges in CSP's order (the 2000 IPL writes 10h to stop), APSS
 - [x] MZ-1Z001 BASIC loads through the 2000-mode IPL: "Ready" pixel-identical to BubiZ
 - [x] MZ-80B mode: SB-5520 BASIC loads to "Ready", pixel-identical to BubiZ `-mz80b` (green display)
-- [ ] MZ-80B 320x200 graphics checked against BubiZ (needs a graphics program)
+- [x] MZ-80B 320x200 graphics on hardware: SB-5520 `GRAPH I1,O1,C` and two `LINE`s draw corner to corner
 - [x] Puckn Boy after MZ-1Z002 from one two-record MZT (`MON`, `L`, `PUCKN BOY` at FILE NAME): the monitor finds
       MZ-1Z002, skips it, loads and runs Puckn Boy; colour title pixel-identical to BubiZ. The player pauses with the
       motor and carries on where it stopped, so SharpMZ_MiSTer's stop-mid-block fix (cmt.vhd) has no counterpart here.
-- [ ] More MZ-2000 tapes (SharpMZ's `software/mz2200` titles)
+- [x] More MZ-2000 tapes on hardware: Gang Man, Zero Fighter, Itasandrias, Super Doors load and play; C-DOS
+      disks boot TF-DOS in MZ-2000 mode; Ice Block's MZT is malformed (as in the old core)
+- [ ] Project A (MZ-2000): the IPL loads PROJECT A, its loader reads DATA, but the game starts after ~110 s of a
+      ~180 s data block and the screen stays black; BubiZ shows "データをロードしています" and is still loading at
+      400 s. Tracing the tape transport (debug snapshot: 8255 port A, player phase)
 - [ ] Tape recording (MIC, PC7), the SharpMZ_MiSTer image-append approach
 
 ## Phase 11: SDRAM

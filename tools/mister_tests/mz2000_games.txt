@@ -1,0 +1,76 @@
+# MZ-2000 mode: IPL tapes (real tape speed), the title after loading, then a key; C-DOS (TF-DOS) disks
+cfg bootmode 2000
+cfg keyboard jp
+load Tape MZ2000 Gang Man
+wait 12
+key C
+wait 110
+shot m2k_gang_man
+key SPACE 0.3
+wait 4
+shot m2k_gang_man_space
+key ENTER 0.3
+wait 4
+shot m2k_gang_man_enter
+load Tape MZ2000 Zero Fighter
+wait 12
+key C
+wait 95
+shot m2k_zero_fighter
+key SPACE 0.3
+wait 4
+shot m2k_zero_fighter_space
+key ENTER 0.3
+wait 4
+shot m2k_zero_fighter_enter
+load Tape MZ2000 Itasandrias
+wait 12
+key C
+wait 120
+shot m2k_itasandrias
+key SPACE 0.3
+wait 4
+shot m2k_itasandrias_space
+key ENTER 0.3
+wait 4
+shot m2k_itasandrias_enter
+load Tape MZ2000 Super Doors
+wait 12
+key C
+wait 100
+shot m2k_super_doors
+key SPACE 0.3
+wait 4
+shot m2k_super_doors_space
+key ENTER 0.3
+wait 4
+shot m2k_super_doors_enter
+load Tape MZ2000 Project A
+wait 12
+key C
+wait 330
+shot m2k_project_a
+key SPACE 0.3
+wait 4
+shot m2k_project_a_space
+key ENTER 0.3
+wait 4
+shot m2k_project_a_enter
+load Tape MZ2000 Ice Block
+wait 12
+key C
+wait 330
+shot m2k_ice_block
+key SPACE 0.3
+wait 4
+shot m2k_ice_block_space
+key ENTER 0.3
+wait 4
+shot m2k_ice_block_enter
+load MZ2000 CDOS Programs 1
+wait 40
+shot m2k_cdos1
+load MZ2000 CDOS Programs 2
+wait 40
+shot m2k_cdos2
+cfg bootmode 2500

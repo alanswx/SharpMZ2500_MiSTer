@@ -1,0 +1,20 @@
+# MZ-2000 Project A: the IPL loads PROJECT A (22 KB), whose loader reads DATA (37 KB) from tape: ~5 min
+cfg bootmode 2000
+load Tape MZ2000 Project A
+wait 12
+key C
+wait 240
+shot pa_240
+wait 60
+shot pa_300
+wait 60
+shot pa_360
+wait 60
+shot pa_420
+key SPACE 0.3
+wait 5
+shot pa_space
+key ENTER 0.3
+wait 5
+shot pa_enter
+cfg bootmode 2500

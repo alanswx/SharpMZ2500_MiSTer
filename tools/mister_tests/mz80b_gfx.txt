@@ -1,0 +1,16 @@
+# MZ-80B mode graphics: SB-5520 BASIC, GRAPH output to page 1, two diagonals corner to corner (320 x 200)
+cfg bootmode 80b
+cfg keyboard us
+load MZ-80B BASIC SB-5520 (tape)
+wait 12
+key C
+wait 260
+type GRAPH I1,O1,C\n
+wait 2
+type LINE 0,0,319,199\n
+wait 2
+type LINE 0,199,319,0\n
+wait 3
+shot m80b_gfx
+cfg keyboard jp
+cfg bootmode 2500
