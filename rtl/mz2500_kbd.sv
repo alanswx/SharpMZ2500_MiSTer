@@ -6,8 +6,8 @@
 // row bits 3-0, bit 4 = 0 reads the AND of all rows ("any key"). The layout is positional like CSP's
 // (a Japanese MZ keyboard on PC keys): the JIS symbols sit where a JP keyboard has them.
 //
-// PC key -> MZ key for the non-obvious ones: F11 = HELP, F12 = COPY, End or Pause = BREAK, Home = CLR/HOME,
-// Delete/Insert = INST/DEL, Alt = GRAPH, Caps Lock = LOCK, Left GUI or the JP Kanji key = LOGO,
+// PC key -> MZ key for the non-obvious ones: F11 = HELP, F12 or Print Screen = COPY, End or Pause = BREAK,
+// Home = CLR/HOME, Delete/Insert = INST/DEL, Alt = GRAPH, Caps Lock = LOCK, Left GUI or the JP Kanji key = LOGO,
 // JP Kana / Muhenkan / Henkan keys as themselves.
 //
 // us_layout (OSD): the symbol keys of a US keyboard type their printed symbol. A symbol whose MZ key or shift
@@ -142,6 +142,7 @@ always @(*) begin
 			8'h71: begin row = 4'd10; bit_n = 3'd3; end   // INST/DEL (Delete)
 			8'h70: begin row = 4'd10; bit_n = 3'd3; end   // INST/DEL (Insert)
 			8'h4A: begin row = 4'd10; bit_n = 3'd7; end   // KP /
+			8'h7C: begin row = 4'd10; bit_n = 3'd1; end   // COPY (Print Screen: F12 is the MiSTer menu)
 			8'h7A: begin row = 4'd1;  bit_n = 3'd4; end   // KP , (Page Down, as maroon's adapter)
 			8'h11: begin row = 4'd11; bit_n = 3'd0; end   // GRAPH (right Alt)
 			8'h14: begin row = 4'd11; bit_n = 3'd4; end   // CTRL (right)

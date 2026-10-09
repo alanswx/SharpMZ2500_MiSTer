@@ -22,7 +22,8 @@ Steps:
   joy NAME [HOLD]    gamepad: up, down, left, right, a, b, x, y, start, select or a button code 0x1nn
                      (held HOLD seconds, default 0.3)
   cfg OPTION VALUE   set an OSD option in config/SharpMZ2500.CFG before a load (Main reads it when the core
-                     starts): bootmode 2500|2000|80b, lines 400|200, keyboard jp|us
+                     starts): bootmode 2500|2000|80b, lines 400|200, keyboard jp|us,
+                     model 2500|2520
 
 Key names: A-Z, 0-9, ENTER, SPACE, ESC, BACKSPACE, TAB, UP, DOWN, LEFT, RIGHT, F1-F12, LEFTSHIFT, LEFTCTRL,
 LEFTALT, MINUS, EQUAL, COMMA, DOT, SLASH, SEMICOLON, APOSTROPHE, KP0-KP9, KPENTER, HOME, END, INSERT, DELETE,
@@ -62,7 +63,7 @@ MGL_DIR = '/media/fat/_Computer/_SharpMZ2500'
 CFG = '/media/fat/config/SharpMZ2500.CFG'
 # OSD options as status bits (CONF_STR in SharpMZ2500.sv): name -> (low bit, width, {value: field})
 OPTIONS = {'bootmode': (2, 2, {'2500': 0, '2000': 1, '80b': 2}), 'lines': (1, 1, {'400': 0, '200': 1}),
-           'keyboard': (7, 1, {'jp': 0, 'us': 1})}
+           'keyboard': (7, 1, {'jp': 0, 'us': 1}), 'model': (8, 1, {'2500': 0, '2520': 1})}
 
 
 def set_option(name, value):

@@ -8,11 +8,11 @@
 //   DD     bit 0 side.
 //   DE     bit 0 density (0 = MFM): latched only; the D88 sectors carry their own density.
 //
-// Two drives on the MiSTer image slots, D88 images (3.5" 2DD: 80 cylinders x 2 sides x 16 x 256 bytes, or any
+// Two drives (four with the MZ_FOUR_DRIVES macro, files.qip) on the MiSTer image slots, D88 images (3.5" 2DD: 80 cylinders x 2 sides x 16 x 256 bytes, or any
 // layout the D88 track table describes). The chip is Sorgelig's wd1793.sv with FM-7_MiSTer's D77/D88 support,
 // as SharpMZ_MiSTer uses it: one instance per drive. Commands go to the selected drive; track, sector and data
-// writes go to both, as a single chip has one register set. Units 2 and 3 have no drive: the status reads not
-// ready and commands are ignored. The FDC's IRQ/DRQ are not wired to anything on the MZ-2500 (software polls).
+// writes go to all, as a single chip has one register set. An empty slot reads not ready. The FDC's IRQ/DRQ are
+// not wired to anything on the MZ-2500 (software polls).
 //
 // Copyright (C) 2026 Alan Steremberg. GPL-3.0-or-later (see LICENSE). wd1793.sv: GPL-2.0-or-later.
 //=======================================================================================================
@@ -31,25 +31,25 @@ module mz2500_fdc
 	input         drsel,          // OPN port A bit 1: swap drives 0-1 / 2-3
 
 	// MiSTer image slots (hps_io), one per drive
-	input   [1:0] img_mounted,
+	input   [3:0] img_mounted,
 	input         img_readonly,
 	input  [63:0] img_size,
-	output [31:0] sd_lba[2],
-	output  [1:0] sd_rd,
-	output  [1:0] sd_wr,
-	input   [1:0] sd_ack,
+	output [31:0] sd_lba[4],
+	output  [3:0] sd_rd,
+	output  [3:0] sd_wr,
+	input   [3:0] sd_ack,
 	input   [8:0] sd_buff_addr,
 	input   [7:0] sd_buff_dout,
-	output  [7:0] sd_buff_din[2],
+	output  [7:0] sd_buff_din[4],
 	input         sd_buff_wr,
 
 	output        busy            // drive activity (LED)
 );
 
-reg  [1:0] mounted = 0;
-reg  [1:0] wprot = 0;
+reg  [3:0] mounted = 0;
+reg  [3:0] wprot = 0;
 always @(posedge clk_sys) begin
-	for (int i = 0; i < 2; i++)
+	for (int i = 0; i < 4; i++)
 		if (img_mounted[i]) begin
 			mounted[i] <= |img_size;
 			wprot[i]   <= img_readonly;
@@ -77,12 +77,27 @@ always @(posedge clk_sys) begin
 	end
 end
 
-wire [7:0] fdc_dout[2];
-wire [1:0] fdc_busy, fdc_prepare;
+wire [7:0] fdc_dout[4];
+wire [3:0] fdc_busy, fdc_prepare;
+
+`ifdef MZ_FOUR_DRIVES
+localparam NDRV = 4;
+`else
+localparam NDRV = 2;             // drives 3-4 cost ~4600 ALMs and 66 M10Ks (track buffers): a build option
+`endif
 
 genvar d;
 generate
-	for (d = 0; d < 2; d = d + 1) begin : drv
+	for (d = NDRV; d < 4; d = d + 1) begin : nodrv
+		assign fdc_dout[d] = 8'h80;  // not ready
+		assign fdc_busy[d] = 1'b0;
+		assign fdc_prepare[d] = 1'b0;
+		assign sd_lba[d] = 32'd0;
+		assign sd_rd[d] = 1'b0;
+		assign sd_wr[d] = 1'b0;
+		assign sd_buff_din[d] = 8'h00;
+	end
+	for (d = 0; d < NDRV; d = d + 1) begin : drv
 		wire selected = (drive == d);
 		wire io_en = chip & (selected | (io_wr & reg_a != 2'd0));
 
@@ -135,8 +150,7 @@ generate
 	end
 endgenerate
 
-// Units 2-3 (no drive): registers of drive 0's instance, status "not ready".
-wire [7:0] dout_sel = drive[1] ? ((reg_a == 2'd0) ? (fdc_dout[0] | 8'h80) : fdc_dout[0]) : fdc_dout[drive[0]];
+wire [7:0] dout_sel = fdc_dout[drive];
 assign io_din = ~dout_sel;
 assign busy   = |(fdc_busy & mounted);
 

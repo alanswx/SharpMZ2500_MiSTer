@@ -43,6 +43,8 @@ struct Options {
     uint32_t    stop_frame = 60;
     bool        quiet = false;
     std::set<uint32_t> screenshots;       // --screenshot N
+    std::string ipl2520_file;
+    bool        mz2520 = false;          // --mz2520: MZ-2520 model (its IPL from boot.rom 008000 / --ipl2520)
     bool        kbd_us = false;          // --kbd-us: US symbol keyboard layout (OSD option)
     bool        dump_range = false;
     uint32_t    dump_from = 0, dump_to = 0;
@@ -77,6 +79,7 @@ static void usage()
 "  --stop-at-frame N      exit after frame N (default 60)\n"
 "  --quiet                no progress on stderr\n"
 "  --kbd-us               keyboard: US symbol layout (the OSD option)\n"
+"  --mz2520               MZ-2520 model: IPL from the boot.rom 2520 slot (or --ipl2520 FILE)\n"
 "  --type FRAME:TEXT      type TEXT from FRAME; \\n or {RETURN}, {BREAK}, {DEL}, {WAITn} ...\n"
 "  --type-rate P:R        frames per key press:release (default 3:3)\n"
 "  --screenshot N         PNG of frame N (repeatable)\n"
@@ -116,6 +119,8 @@ static bool parse_args(int argc, char **argv, Options &o)
         else if (a == "--stop-at-frame") o.stop_frame = parse_num(next());
         else if (a == "--quiet") o.quiet = true;
         else if (a == "--kbd-us") o.kbd_us = true;
+        else if (a == "--mz2520") o.mz2520 = true;
+        else if (a == "--ipl2520") o.ipl2520_file = next();
         else if (a == "--type") {
             std::string s = next();
             size_t c = s.find(':');
@@ -417,6 +422,10 @@ bool Sim::load_roms()
     d.resize(0x8000, 0xFF);
     ioctl_load(0, d);
     d.clear();
+    std::string ipl2520 = opt.ipl2520_file.empty() ? "../software/roms/extracted/MZ-2520_IPL/IPL.ROM" : opt.ipl2520_file;
+    if (read_file(ipl2520, d)) { d.resize(0x8000, 0xFF); ioctl_load(0x8000, d); }
+    else if (opt.mz2520) fprintf(stderr, "warning: no MZ-2520 IPL %s\n", ipl2520.c_str());
+    d.clear();
     if (!read_file(kanji, d)) fprintf(stderr, "warning: no kanji ROM %s: no text font\n", kanji.c_str());
     else { d.resize(0x40000, 0xFF); ioctl_load(0x10000, d); }
     return true;
@@ -594,6 +603,7 @@ int Sim::run()
     top->boot_mode = opt.boot_mode;
     top->ps2_key = 0;
     top->kbd_us = opt.kbd_us;
+    top->model_2520 = opt.mz2520;
     top->ioctl_download = 0; top->ioctl_wr = 0;
     for (int i = 0; i < 256; i++) clock();
     // As on the MiSTer: Main holds the core in reset (status bit 0) while it sends boot.rom, then releases it.

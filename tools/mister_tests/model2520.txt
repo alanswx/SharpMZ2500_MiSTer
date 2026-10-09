@@ -1,0 +1,10 @@
+# MZ-2520 model (its own IPL from boot.rom 008000): the IPL menu offers only F (no tape), then Dust Box 1 boots
+cfg bootmode 2500
+cfg model 2520
+load core
+wait 10
+shot m2520_ipl
+load Dust Box Vol 01
+wait 45
+shot m2520_db01
+cfg model 2500

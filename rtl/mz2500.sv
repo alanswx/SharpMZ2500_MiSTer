@@ -27,6 +27,7 @@ module mz2500
 	input         reset,
 	input         lines400,       // front-panel 200/400-line switch: 1 = 400 lines (24 kHz), 0 = 200 lines (15 kHz)
 	input   [1:0] boot_mode,      // front-panel boot switch: 0 = MZ-2500, 1 = MZ-2000, 2 = MZ-80B (applies at reset)
+	input         model_2520,     // MZ-2520: its own IPL (boot.rom 008000-00FFFF), applies at reset
 	input  [10:0] ps2_key,
 	input  [64:0] rtc,            // hps_io RTC: BCD time and date, bit 64 toggles on an update
 	input   [5:0] joy0,           // MiSTer joysticks 1 and 2: right, left, down, up, trigger A, trigger B (active high)
@@ -49,17 +50,17 @@ module mz2500
 	input       [7:0] ram_dout,
 	input             ram_ready,
 
-	// Floppy image slots (hps_io sd_* bus), drives 1 and 2
-	input       [1:0] img_mounted,
+	// Floppy image slots (hps_io sd_* bus), drives 1-4
+	input       [3:0] img_mounted,
 	input             img_readonly,
 	input      [63:0] img_size,
-	output     [31:0] sd_lba[2],
-	output      [1:0] sd_rd,
-	output      [1:0] sd_wr,
-	input       [1:0] sd_ack,
+	output     [31:0] sd_lba[4],
+	output      [3:0] sd_rd,
+	output      [3:0] sd_wr,
+	input       [3:0] sd_ack,
 	input       [8:0] sd_buff_addr,
 	input       [7:0] sd_buff_dout,
-	output      [7:0] sd_buff_din[2],
+	output      [7:0] sd_buff_din[4],
 	input             sd_buff_wr,
 	output            fdd_busy,
 
@@ -119,7 +120,8 @@ localparam integer OPN_HZ     = 2000000;
 // CPU 6 MHz: fractional accumulator (the 24 MHz and 21.477 MHz crystals are not related).
 // boot mode, latched at reset (CSP reads config.boot_mode at power on)
 reg  [1:0] boot_m;
-always @(posedge clk_sys) if (reset) boot_m <= boot_mode;
+reg        m2520;
+always @(posedge clk_sys) if (reset) begin boot_m <= boot_mode; m2520 <= model_2520; end
 wire       mode_2500 = boot_m == 2'd0;
 wire [27:0] cpu_hz = mode_2500 ? CPU_HZ : CPU_HZ_LOW;
 
@@ -303,11 +305,12 @@ end
 // Memories
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-wire ld_ipl   = rom_dl && ioctl_addr[24:15] == 10'd0;
+wire ld_ipl   = rom_dl && ioctl_addr[24:16] == 9'd0;        // MZ-2500 IPL 000000-007FFF, MZ-2520 IPL 008000-00FFFF
 wire ld_kanji = rom_dl && ioctl_addr[24:16] >= 9'd1 && ioctl_addr[24:16] <= 9'd4;
 wire ld_tape  = tape_dl && ioctl_addr[24:20] == 5'd0;      // up to 1 MB at SDRAM 100000
 
-// SDRAM holds main RAM 256 KB (pages 00-1F) at 000000-03FFFF, the IPL ROM (pages 34-37) at 040000-047FFF and the
+// SDRAM holds main RAM 256 KB (pages 00-1F) at 000000-03FFFF, the IPL ROM (pages 34-37) at 040000-047FFF (MZ-2520:
+// 048000-04FFFF) and the
 // kanji ROM at 080000-0BFFFF (CPU window: page 39 with CF bit 7; text raster glyph fetches). The controller
 // (rtl/sdram.sv) takes a request on a rising edge of rd or we and drops 'ready' until it is done. Clients, in
 // priority order: the text raster (a glyph byte per text cell, requested two cells ahead of display), posted CPU
@@ -316,7 +319,7 @@ wire ld_tape  = tape_dl && ioctl_addr[24:20] == 5'd0;      // up to 1 MB at SDRA
 wire        kwin         = cur_page == 6'h39 && kanji_bank[7] && cur_off[12:11] == 2'd0;
 wire        ram_page     = !cur_page[5] || cur_page[5:2] == 4'b1101 || kwin;
 wire [24:0] cpu_ram_addr = kwin        ? {5'd0, 2'b10, kanji_bank[6:0], cur_off[10:0]} :
-                           cur_page[5] ? {6'd0, 1'b1, 3'b000, cur_page[1:0], cur_off} : {7'd0, cur_page[4:0], cur_off};
+                           cur_page[5] ? {6'd0, 1'b1, 2'b00, m2520, cur_page[1:0], cur_off} : {7'd0, cur_page[4:0], cur_off};
 
 wire [17:0] kanji_ld_addr = ioctl_addr[17:0] - 18'h10000;
 
@@ -399,7 +402,7 @@ always @(posedge clk_sys) begin
 		ram_wpend <= 1'b1; ram_waddr <= cpu_ram_addr; ram_wdata <= cpu_dout;
 	end
 	if (ld_ipl && ioctl_wr) begin
-		ld_pend <= 1'b1; ld_addr <= 25'h40000 | {10'd0, ioctl_addr[14:0]}; ld_data <= ioctl_dout;
+		ld_pend <= 1'b1; ld_addr <= 25'h40000 | {9'd0, ioctl_addr[15:0]}; ld_data <= ioctl_dout;
 	end
 	if (ld_tape && ioctl_wr) begin
 		ld_pend <= 1'b1; ld_addr <= {4'd0, 1'b1, ioctl_addr[19:0]}; ld_data <= ioctl_dout;

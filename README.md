@@ -7,6 +7,26 @@ kanji ROM, and an MZ-80B / MZ-2000 compatible mode.
 Sister project of [SharpMZ_MiSTer](https://github.com/alanswx/SharpMZ_MiSTer) (MZ-80K to MZ-2000), with which it
 shares the T80, 8255, 8253, Z80 PIO, floppy and tape RTL.
 
+## Getting started on a MiSTer
+
+1. Copy `SharpMZ2500_<date>.rbf` to `/media/fat/_Computer/`.
+2. Make `boot.rom` from your own ROM dumps (they are Sharp's copyright and not included). From the MAME `mz2500`
+   set you need `ipl.rom` (32 KB, CRC 7a659f20) and `kanji.rom` (256 KB, CRC dd426767); for the MZ-2520 model also
+   `ipl2520.rom` (mz2520 set, CRC 0a126eb2). Then either `tools/make_bootrom.sh ipl.rom kanji.rom boot.rom
+   [ipl2520.rom]`, or by hand (the second 32 KB is the MZ-2520 IPL slot; any filler works without it):
+   - Windows: `copy /b ipl.rom + ipl.rom + kanji.rom boot.rom` (or `ipl.rom + ipl2520.rom + kanji.rom`)
+   - Mac/Linux: `cat ipl.rom ipl.rom kanji.rom > boot.rom`
+
+   The result is 327,680 bytes. Put it in `/media/fat/games/SharpMZ2500/boot.rom`; the core loads it at start-up.
+3. Disks: `.d88` images in Drive 1-4 from the OSD, then reset. The IPL boots drive 1.
+4. Tapes (MZ-2000 / MZ-80B software): set Boot mode to MZ-2000 or MZ-80B, Load tape (`.mzt`), reset and press C
+   at the IPL menu. Loading runs at real tape speed (BASIC takes a few minutes).
+5. OSD options: Lines (400 = 24 kHz monitor, 200 = 15 kHz), Boot mode (MZ-2500 / MZ-2000 / MZ-80B, applies at reset),
+   Keyboard (Japanese positional layout or US symbols), Model (MZ-2500 / MZ-2520, applies at reset).
+6. Keys: F11 = HELP, Print Screen = COPY (F12 opens the MiSTer menu), End or Pause = BREAK, Home = CLR/HOME,
+   Insert/Delete = INST/DEL, Alt = GRAPH, Caps Lock = LOCK. The mouse and joystick 1 work (Dust Box menus, games).
+7. MGL launchers: `tools/make_mgls.py` writes one per disk and tape (`_Computer/_SharpMZ2500/`).
+
 ## Status: Ys III boots from floppy and plays its intro (simulation)
 
 In the Verilator simulation, with the real IPL and kanji ROMs:
@@ -50,7 +70,7 @@ MZ-2000 mode: set Boot mode to MZ-2000, load an MZT (e.g. MZ-1Z001 BASIC), reset
 sim (`--boot-mode 2000 --tape MZ-1Z001.mzt --type 600:c`) BASIC comes up "Ready" by frame 13500, pixel-identical to
 BubiZ-2500 `-mz2000`; in MZ-80B mode SB-5520 BASIC likewise (`--boot-mode 80b`).
 
-ROMs: build `boot.rom` from your dumps with `tools/make_bootrom.sh IPL.ROM KANJI.ROM boot.rom` (CRCs in
+ROMs: build `boot.rom` from your dumps with `tools/make_bootrom.sh IPL.ROM KANJI.ROM boot.rom [IPL2520.ROM]` (CRCs in
 docs/roms.md) and put it in `games/SharpMZ2500/` on the SD card; the sim reads `software/roms/extracted/` by default
 or `--rom boot.rom`.
 

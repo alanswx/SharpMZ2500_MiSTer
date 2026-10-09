@@ -161,8 +161,12 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 
 ## Phase 12: OSD and MiSTer integration
 
-- [ ] Final CONF_STR: ROM loading (boot0..3.rom or F entries; decide), drives, tape, boot mode, model 2500/2520
-      (MZ-2520: `ipl2520.rom`, no data recorder, no 80B/2000 modes), RAM size, line mode, mouse, joysticks
+- [x] Model option MZ-2500 / MZ-2520 (the 2520 IPL from boot.rom 008000; its menu offers only the floppy, as in
+      MAME's mz2520; Dust Box boots on hardware). RAM size option still open (128 KB machines)
+- [x] Drives 3-4: in the RTL behind the MZ_FOUR_DRIVES macro (add `set_global_assignment -name VERILOG_MACRO
+      "MZ_FOUR_DRIVES=1"` to files.qip): +4600 ALMs, +66 M10Ks and the sys/ascal paths miss timing by 0.03 ns, so
+      the standard build keeps two drives
+- [x] COPY also on Print Screen (F12 is the MiSTer menu); README "Getting started" for testers
 - [x] MGL files (`tools/make_mgls.py`) and hardware tests (`tools/mister_test.py`, `tools/mister_run.sh`,
       `tools/mister_tests/`); first MiSTer run 2026-10-08: IPL, Ys III, Dust Box 1-16 + Special 1, MZ-2000/80B BASIC
       from tape, Puckn Boy all work (Dust Box Special 2-3 are data disks: "not master" in BubiZ too)

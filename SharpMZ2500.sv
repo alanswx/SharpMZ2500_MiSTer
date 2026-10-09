@@ -75,12 +75,17 @@ localparam CONF_STR =
 	"-;",
 	"S0,D88,Drive 1;",
 	"S1,D88,Drive 2;",
+`ifdef MZ_FOUR_DRIVES
+	"S2,D88,Drive 3;",
+	"S3,D88,Drive 4;",
+`endif
 	"-;",
 	"F1,MZT,Load tape;",
 	"-;",
 	"O[1],Lines (front switch),400 (24 kHz),200 (15 kHz);",
 	"O[3:2],Boot mode (reset),MZ-2500,MZ-2000,MZ-80B;",
 	"O[7],Keyboard,Japanese (positional),US (symbols);",
+	"O[8],Model (reset),MZ-2500,MZ-2520;",
 	"-;",
 	"J1,Trigger A,Trigger B;",
 	"O[6:5],Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
@@ -127,19 +132,42 @@ wire  [7:0] ioctl_dout;
 wire        ioctl_wait;
 
 // Floppy image slots S0/S1 (drives 1 and 2), 512-byte blocks
-wire  [1:0] img_mounted;
+wire  [3:0] img_mounted;
 wire        img_readonly;
 wire [63:0] img_size;
-wire [31:0] sd_lba[2];
-wire  [1:0] sd_rd, sd_wr, sd_ack;
+wire [31:0] sd_lba[4];
+wire  [3:0] sd_rd, sd_wr, sd_ack;
 wire  [8:0] sd_buff_addr;
 wire  [7:0] sd_buff_dout;
-wire  [7:0] sd_buff_din[2];
+wire  [7:0] sd_buff_din[4];
 wire        sd_buff_wr;
 wire        fdd_busy;
 assign LED_DISK = {1'b0, fdd_busy};
 
-hps_io #(.CONF_STR(CONF_STR), .VDNUM(2)) hps_io
+// Floppy slots: 2, or 4 with the MZ_FOUR_DRIVES macro (rtl/mz2500_fdc.sv); the machine's buses are 4 wide
+`ifdef MZ_FOUR_DRIVES
+localparam NDRV = 4;
+`else
+localparam NDRV = 2;
+`endif
+wire [NDRV-1:0] h_mounted, h_rd, h_wr, h_ack;
+wire     [31:0] h_lba[NDRV];
+wire      [7:0] h_buff_din[NDRV];
+wire      [5:0] h_blk_cnt[NDRV];
+assign img_mounted = 4'(h_mounted);
+assign sd_ack      = 4'(h_ack);
+assign h_rd        = sd_rd[NDRV-1:0];
+assign h_wr        = sd_wr[NDRV-1:0];
+genvar hd;
+generate
+	for (hd = 0; hd < NDRV; hd = hd + 1) begin : hslot
+		assign h_lba[hd]      = sd_lba[hd];
+		assign h_buff_din[hd] = sd_buff_din[hd];
+		assign h_blk_cnt[hd]  = 6'd0;
+	end
+endgenerate
+
+hps_io #(.CONF_STR(CONF_STR), .VDNUM(NDRV)) hps_io
 (
 	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
@@ -164,17 +192,17 @@ hps_io #(.CONF_STR(CONF_STR), .VDNUM(2)) hps_io
 	.ioctl_dout(ioctl_dout),
 	.ioctl_wait(ioctl_wait),
 
-	.img_mounted(img_mounted),
+	.img_mounted(h_mounted),
 	.img_readonly(img_readonly),
 	.img_size(img_size),
-	.sd_lba(sd_lba),
-	.sd_blk_cnt('{6'd0, 6'd0}),
-	.sd_rd(sd_rd),
-	.sd_wr(sd_wr),
-	.sd_ack(sd_ack),
+	.sd_lba(h_lba),
+	.sd_blk_cnt(h_blk_cnt),
+	.sd_rd(h_rd),
+	.sd_wr(h_wr),
+	.sd_ack(h_ack),
 	.sd_buff_addr(sd_buff_addr),
 	.sd_buff_dout(sd_buff_dout),
-	.sd_buff_din(sd_buff_din),
+	.sd_buff_din(h_buff_din),
 	.sd_buff_wr(sd_buff_wr)
 );
 
@@ -222,6 +250,7 @@ mz2500 mz2500
 	.clk_sys(clk_sys),
 	.dbg(mz_dbg),
 	.kbd_us(status[7]),
+	.model_2520(status[8]),
 	.reset(reset),
 	.lines400(lines400),
 	.boot_mode(status[3:2] == 2'd3 ? 2'd0 : status[3:2]),

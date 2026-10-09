@@ -26,6 +26,7 @@ module top(
 
    input  [10:0] ps2_key,
    input         kbd_us,
+   input         model_2520,
    input  [24:0] ps2_mouse,
    input         dbg_dump,       // one clock: write main RAM to out/ram_dump.hex and print the MMU pages
 
@@ -68,8 +69,12 @@ sdram_model sdram
    .clk(clk_sys), .addr(dram_addr), .din(dram_din), .dout(dram_dout), .rd(dram_rd), .we(dram_we), .ready(dram_ready)
 );
 
-wire [31:0] fdd_lba[2];
-wire  [7:0] fdd_buff_din[2];
+// drives 3-4 exist in the core; the harness serves drives 1-2
+wire [31:0] fdd_lba[4];
+wire  [7:0] fdd_buff_din[4];
+wire  [3:0] fdd_rd4, fdd_wr4;
+assign fdd_rd = fdd_rd4[1:0];
+assign fdd_wr = fdd_wr4[1:0];
 assign fdd_lba0 = fdd_lba[0];
 assign fdd_lba1 = fdd_lba[1];
 assign fdd_buff_din0 = fdd_buff_din[0];
@@ -83,6 +88,7 @@ mz2500 mz2500
    .boot_mode(boot_mode),
    .ps2_key(ps2_key),
    .kbd_us(kbd_us),
+   .model_2520(model_2520),
    .joy0(6'd0), .joy1(6'd0), .ps2_mouse(ps2_mouse),
    // fixed RTC so runs are reproducible: 1990-04-01 (Sunday) 12:00:00
    .rtc({1'b0, 8'h00, 8'h00, 8'h90, 8'h04, 8'h01, 8'h12, 8'h00, 8'h00}),
@@ -94,8 +100,8 @@ mz2500 mz2500
    .ioctl_dout(ioctl_dout),
    .ioctl_wait(ioctl_wait),
 
-   .img_mounted(img_mounted), .img_readonly(img_readonly), .img_size(img_size),
-   .sd_lba(fdd_lba), .sd_rd(fdd_rd), .sd_wr(fdd_wr), .sd_ack(fdd_ack),
+   .img_mounted({2'b00, img_mounted}), .img_readonly(img_readonly), .img_size(img_size),
+   .sd_lba(fdd_lba), .sd_rd(fdd_rd4), .sd_wr(fdd_wr4), .sd_ack({2'b00, fdd_ack}),
    .sd_buff_addr(sd_buff_addr), .sd_buff_dout(sd_buff_dout), .sd_buff_din(fdd_buff_din), .sd_buff_wr(sd_buff_wr),
    .fdd_busy(),
 
