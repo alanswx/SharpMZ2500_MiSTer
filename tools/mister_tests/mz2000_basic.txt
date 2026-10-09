@@ -1,5 +1,6 @@
 # MZ-2000 mode: MZ-1Z001 BASIC from tape (about 4 min at tape speed), then type a program
 cfg bootmode 2000
+cfg keyboard us
 load MZ-2000 BASIC MZ-1Z001 (tape)
 wait 12
 key C
@@ -11,4 +12,5 @@ type 10 FOR I=1 TO 5:PRINT I,I*I:NEXT\n
 type RUN\n
 wait 3
 shot mz2000_run
+cfg keyboard jp
 cfg bootmode 2500

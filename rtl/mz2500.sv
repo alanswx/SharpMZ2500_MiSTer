@@ -214,8 +214,8 @@ T80s #(.Mode(0), .T2Write(1), .IOWait(1)) cpu
 assign cpu_pc   = cpu_a;
 assign cpu_m1_n = m1_n;
 
-// Debug snapshot: last opcode fetch address and byte, opcode fetch count, reset / wait / SDRAM client state, audio
-// peak, joystick 1
+// Debug snapshot: last opcode fetch address and byte, 8255 port A (tape control), tape player {phase, motor, APSS
+// pulse, READ}, reset / wait / SDRAM client state, audio peak, joystick 1
 reg [15:0] dbg_pc, dbg_m1cnt;
 reg  [7:0] dbg_op;
 reg        dbg_m1_d;
@@ -427,7 +427,7 @@ always @(posedge clk_sys) begin
 	if (dbg_acnt == 23'd0) begin dbg_apk_out <= dbg_apk; dbg_apk <= 15'd0; end
 	else if (dbg_aabs[14:0] > dbg_apk) dbg_apk <= dbg_aabs[14:0];
 end
-assign dbg = {dbg_pc, dbg_op, dbg_m1cnt, 1'b0, ram_st, sys_reset, cpu_reset, wait_n, ram_ready, dbg_apk_out[14:7], 2'b00, joy0};
+assign dbg = {dbg_pc, dbg_op, ppi_pa, cmt_dbg, 1'b0, ram_st, sys_reset, cpu_reset, wait_n, ram_ready, dbg_apk_out[14:7], 2'b00, joy0};
 // The CPU waits for its SDRAM read, and on a write while the previous posted write hasn't been issued yet
 // (one-entry write buffer: a PUSH right behind a raster glyph fetch would otherwise overwrite the first byte).
 // The read releases WAIT one clock after ram_q is loaded: T80s latches DI on the clock enable where it sees WAIT
@@ -800,6 +800,7 @@ wire       trg_b   = joy_mode[6] ? joy_mode[3] : joy_mode[1];
 wire [7:0] joy_rd  = {2'b00, ~(joy_sel[4] | ~trg_a), ~(joy_sel[5] | ~trg_b),
                       ~(joy_dir & joy_sel[0]), ~(joy_dir & joy_sel[1]), ~(joy_dir & joy_sel[2]), ~(joy_dir & joy_sel[3])};
 
+wire [7:0] cmt_dbg;
 mz2500_cmt #(.CLK_HZ(CLK_SYS_HZ)) cmt
 (
 	.clk(clk_sys),
@@ -817,7 +818,8 @@ mz2500_cmt #(.CLK_HZ(CLK_SYS_HZ)) cmt
 	.tready_n(cmt_tready_n),
 	.wready_n(cmt_wready_n),
 	.tend(cmt_tend),
-	.motor(cmt_motor)
+	.motor(cmt_motor),
+	.dbg(cmt_dbg)
 );
 
 mz2500_kbd kbd

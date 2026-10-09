@@ -147,9 +147,12 @@ CPU trace from reset matching the reference emulator for the first few thousand 
       motor and carries on where it stopped, so SharpMZ_MiSTer's stop-mid-block fix (cmt.vhd) has no counterpart here.
 - [x] More MZ-2000 tapes on hardware: Gang Man, Zero Fighter, Itasandrias, Super Doors load and play; C-DOS
       disks boot TF-DOS in MZ-2000 mode; Ice Block's MZT is malformed (as in the old core)
-- [ ] Project A (MZ-2000): the IPL loads PROJECT A, its loader reads DATA, but the game starts after ~110 s of a
-      ~180 s data block and the screen stays black; BubiZ shows "データをロードしています" and is still loading at
-      400 s. Tracing the tape transport (debug snapshot: 8255 port A, player phase)
+- [x] Project A (MZ-2000) plays on hardware: the IPL rewinds for half a second after loading and the loader then
+      presses PLAY; the player rewound instantly to the top, so the loader read PROJECT A's data as DATA. Rewind now
+      winds over time (4 s per record, back to the start of the current record first; APSS: one record at once)
+- [ ] Tape recording (MIC, 8255 PC7): needs a writable tape image (an S slot, as SharpMZ_MiSTer's tape_image.sv;
+      Main has no generic upload): a pulse decoder for the MZ-80B/2000 and MZ-2500 formats, records appended through
+      sd_wr, and playback from that slot
 - [ ] Tape recording (MIC, PC7), the SharpMZ_MiSTer image-append approach
 
 ## Phase 11: SDRAM

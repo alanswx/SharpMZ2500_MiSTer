@@ -44,7 +44,8 @@ module mz2500_cmt #(parameter integer CLK_HZ = 85909091)
 	output            tready_n,        // 8255 PB5
 	output            wready_n,        // 8255 PB4
 	output            tend,            // 8255 PB3: 1 = stopped
-	output            motor
+	output            motor,
+	output      [7:0] dbg           // phase, playing, APSS pulse, READ (debug snapshot)
 );
 
 // ---- 48 kHz sample tick ----
@@ -60,13 +61,23 @@ end
 reg  [7:0] pa_d;
 reg        playing, rewinding, apss;
 reg        ffwd;                     // fast forward without APSS: winds one record per 0.5 s until STOP or the end
+// Rewind winds over time too: every 4 s back to the start of the current record, then of the previous one (found by
+// walking the record sizes from the top), until PLAY/STOP or the top. A short rewind leaves the tape where it was:
+// the MZ-2000 IPL rewinds for half a second after loading and the program's PLAY then reads the next record.
+// APSS rewind: one step at once, then the 350 ms READ pulse.
+reg [17:0] rw_cnt;
+reg        rw_step;                  // a step is requested
+reg  [1:0] walk;                     // 1, 2: reading the size of the record at wp
+reg [19:0] wp;
+reg  [7:0] wsz;
+wire       at_rec_start = (phase == P_SIL1 && cnt == 16'd48000);
 reg [15:0] ff_cnt;
 reg  [1:0] skip;                     // APSS fast forward: reading the record's size (bytes 12h, 13h), then moving on
 reg [15:0] apss_cnt;                 // 350 ms of READ high after an APSS stop, in samples
 assign tready_n = !loaded;
 assign wready_n = 1'b1;
-assign tend     = !(playing || ffwd);
-assign motor    = playing || ffwd;
+assign tend     = !(playing || ffwd || rewinding);
+assign motor    = playing || ffwd || rewinding;
 
 // ---- signal generator ----
 // phases of one record
@@ -121,12 +132,14 @@ task begin_phase(input [4:0] p);
 endtask
 
 wire at_end = rec + 20'd128 > tape_len;
+assign dbg = {phase, playing, apss_cnt != 16'd0, read};
 
 always @(posedge clk) begin
 	if (reset || !loaded) begin
 		pa_d <= 8'hFF;
 		playing <= 1'b0; rewinding <= 1'b0; apss <= 1'b0; apss_cnt <= 16'd0;
 		rec <= 20'd0; read <= 1'b0; rd_req <= 1'b0; byte_ok <= 1'b0; skip <= 2'd0; size <= 16'd0; ffwd <= 1'b0; ff_cnt <= 16'd0;
+		rw_cnt <= 18'd0; rw_step <= 1'b0; walk <= 2'd0;
 		phase <= P_SIL1; cnt <= 16'd48000;
 	end
 	else begin
@@ -135,8 +148,8 @@ always @(posedge clk) begin
 		if (!mz80b) begin
 			// CSP applies the edges of one write in this order, each cancelling the motion before it: REW, FF, PLAY,
 			// STOP. The MZ-2000 mode IPL writes 10h (all four) to leave the deck stopped where it is.
-			if (pa_d[3] && !pa[3]) begin playing <= 1'b0; rewinding <= 1'b0; read <= 1'b0; skip <= 2'd0; ffwd <= 1'b0; end // STOP
-			else if (pa_d[2] && !pa[2]) begin playing <= 1'b1; rewinding <= 1'b0; skip <= 2'd0; ffwd <= 1'b0; end           // PLAY
+			if (pa_d[3] && !pa[3]) begin playing <= 1'b0; rewinding <= 1'b0; read <= 1'b0; skip <= 2'd0; ffwd <= 1'b0; rw_step <= 1'b0; end // STOP
+			else if (pa_d[2] && !pa[2]) begin playing <= 1'b1; rewinding <= 1'b0; skip <= 2'd0; ffwd <= 1'b0; rw_step <= 1'b0; end           // PLAY
 			else if (pa_d[1] && !pa[1]) begin                                                                              // FF
 				playing <= 1'b0; rewinding <= 1'b0; apss <= !pa[7];
 				if (!pa[7]) begin
@@ -146,25 +159,36 @@ always @(posedge clk) begin
 				end
 				else begin ffwd <= 1'b1; ff_cnt <= 16'd0; end
 			end
-			else if (pa_d[0] && !pa[0]) begin rewinding <= 1'b1; playing <= 1'b0; apss <= !pa[7]; skip <= 2'd0; ffwd <= 1'b0; end // REW
+			else if (pa_d[0] && !pa[0]) begin                                                                              // REW
+				rewinding <= 1'b1; playing <= 1'b0; apss <= !pa[7]; skip <= 2'd0; ffwd <= 1'b0;
+				rw_cnt <= 18'd0; rw_step <= !pa[7];
+			end
 		end
 		else begin
 			// the 8255 clears port A at reset, so the IPL's first FFh write is an FF edge here: it is stopped right after
-			if (!pa_d[3] && pa[3]) begin playing <= 1'b0; rewinding <= 1'b0; read <= 1'b0; ffwd <= 1'b0; skip <= 2'd0; end
-			else if (!pa_d[2] && pa[2]) begin playing <= 1'b1; rewinding <= 1'b0; ffwd <= 1'b0; skip <= 2'd0; end
+			if (!pa_d[3] && pa[3]) begin playing <= 1'b0; rewinding <= 1'b0; read <= 1'b0; ffwd <= 1'b0; skip <= 2'd0; rw_step <= 1'b0; end
+			else if (!pa_d[2] && pa[2]) begin playing <= 1'b1; rewinding <= 1'b0; ffwd <= 1'b0; skip <= 2'd0; rw_step <= 1'b0; end
 			else if (!pa_d[0] && pa[0]) begin
 				playing <= 1'b0; apss <= 1'b0;
 				if (pa[1]) begin ffwd <= 1'b1; ff_cnt <= 16'd0; end
-				else begin rewinding <= 1'b1; ffwd <= 1'b0; skip <= 2'd0; end
+				else begin rewinding <= 1'b1; ffwd <= 1'b0; skip <= 2'd0; rw_cnt <= 18'd0; end
 			end
 		end
 
-		// rewind: instant, to the top (APSS: to the start of the previous record is not tracked; go to the top)
-		if (rewinding) begin
-			rewinding <= 1'b0;
-			rec <= 20'd0; phase <= P_SIL1; cnt <= 16'd48000; read <= 1'b0;
-			if (apss) apss_cnt <= 16'd16800;
-			else if (!pa[6] && !mz80b) playing <= 1'b1;   // auto play at the top
+		// ---- rewind ----
+		if (tick && rewinding && !apss && !rw_step && walk == 2'd0) begin
+			if (rw_cnt != 18'd191999) rw_cnt <= rw_cnt + 18'd1;
+			else begin rw_cnt <= 18'd0; rw_step <= 1'b1; end
+		end
+		if (rewinding && rw_step && walk == 2'd0) begin
+			rw_step <= 1'b0; read <= 1'b0;
+			if (!at_rec_start) begin phase <= P_SIL1; cnt <= 16'd48000; if (apss) begin rewinding <= 1'b0; apss_cnt <= 16'd16800; end end
+			else if (rec == 20'd0) begin                                    // the top
+				rewinding <= 1'b0;
+				if (apss) apss_cnt <= 16'd16800;
+				else if (!pa[6] && !mz80b) playing <= 1'b1;                     // auto play at the top
+			end
+			else begin walk <= 2'd1; wp <= 20'd0; rd_req <= 1'b1; rd_addr <= 20'h12; byte_ok <= 1'b0; end
 		end
 
 		if (tick && apss_cnt != 16'd0) begin
@@ -180,6 +204,19 @@ always @(posedge clk) begin
 			rec <= rec + 20'd128 + {4'd0, rd_data, size[7:0]};
 			phase <= P_SIL1; cnt <= 16'd48000;
 			if (apss) apss_cnt <= 16'd16800;              // the gap is found: READ high for 350 ms
+		end
+		// rewind: walk the record sizes from the top to find the record before 'rec'
+		if (rd_ack && walk == 2'd1) begin wsz <= rd_data; walk <= 2'd2; rd_req <= 1'b1; rd_addr <= wp + 20'h13; end
+		if (rd_ack && walk == 2'd2) begin
+			if (wp + 20'd128 + {4'd0, rd_data, wsz} >= rec) begin
+				// wp is the record before the current one
+				walk <= 2'd0; rec <= wp; phase <= P_SIL1; cnt <= 16'd48000;
+				if (apss) begin rewinding <= 1'b0; apss_cnt <= 16'd16800; end
+			end
+			else begin
+				wp <= wp + 20'd128 + {4'd0, rd_data, wsz};
+				walk <= 2'd1; rd_req <= 1'b1; rd_addr <= wp + 20'd128 + {4'd0, rd_data, wsz} + 20'h12;
+			end
 		end
 		// fast forward: one record per 0.5 s of winding
 		if (tick && ffwd) begin
@@ -197,7 +234,7 @@ always @(posedge clk) begin
 				read <= 1'b0;
 				if (phase == P_SIL1 && at_end) begin
 					playing <= 1'b0;                          // end of tape
-					if (!pa[5] && !mz80b) rewinding <= 1'b1;
+					if (!pa[5] && !mz80b) begin rewinding <= 1'b1; apss <= 1'b0; rw_cnt <= 18'd0; end
 				end
 				else if (cnt == 16'd1) begin_phase(phase + 5'd1);
 				else cnt <= cnt - 16'd1;
