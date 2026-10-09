@@ -1,0 +1,98 @@
+# Ys III: ESC then ENTER through the intro into free play, F4 = DISK SAVE / PRESS RETURN, RETURN
+cfg bootmode 2500
+load Ys III
+wait 155
+key ENTER 0.2
+wait 8
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ESC 0.2
+wait 3.5
+key ENTER 0.3
+wait 4
+key ENTER 0.3
+wait 4
+key ENTER 0.3
+wait 4
+key ENTER 0.3
+wait 4
+key ENTER 0.3
+wait 4
+key ENTER 0.3
+wait 4
+key ENTER 0.3
+wait 4
+key ENTER 0.3
+wait 4
+shot s11_field
+key F4 0.3
+wait 3
+shot s11_f4
+key ENTER 0.3
+wait 2
+shot s11_enter_2s
+wait 4
+shot s11_enter_6s
+wait 6
+shot s11_enter_12s
+key ENTER 0.3
+wait 4
+shot s11_enter2
+wait 8
+shot s11_enter2_b

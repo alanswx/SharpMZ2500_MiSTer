@@ -170,8 +170,12 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 - [x] Ys III past the intro on hardware: the game starts in town (Dogi's dialogue)
 - [x] Mouse (Dust Box vol.4 menu: pointer moves, click opens an item), joystick 1 (directions, triggers), sound level
 - [x] Timing margin: CPU read data registered, text setup pipelined (+0.65 ns; the worst path is now in sys/ascal)
-- [ ] Disk writes on hardware (a Ys III save, or a bootable write-test disk: boot record "IPLPRO" at track 0 side 1
-      sector 1, see the IPL's reads of a Dust Box disk)
+- [x] Disk writes on hardware: Ys III saves (F4, RETURN) to the user disk in drive 2; 22 sectors change, the D88
+      structure stays intact (`tools/mister_tests/ys3_save.txt`, ~8 min through the intro and dialogue)
+- [ ] Ys III dialogue sometimes ignores repeated key taps (80 ms press, 80 ms release) for a long time; ESC then
+      ENTER gets through. Check whether it is the game's polling or the keyboard path (key-up timing)
+- [ ] mister14 ssh sessions sometimes drop during long plans: mister_run.sh could start plans detached (nohup) and
+      poll for the last screenshot
 - [ ] Release notes, docs for users (ROM file names and where to put them)
 
 ## Later / optional
