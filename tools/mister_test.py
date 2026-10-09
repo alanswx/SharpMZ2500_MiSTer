@@ -19,7 +19,8 @@ Steps:
   osd                F12 (open/close the OSD)
   mouse DX DY        move the virtual mouse (relative, in steps of at most 10)
   click [left|right] [HOLD]  mouse button
-  joy NAME [HOLD]    gamepad: up, down, left, right, a, b (held HOLD seconds, default 0.3)
+  joy NAME [HOLD]    gamepad: up, down, left, right, a, b, x, y, start, select or a button code 0x1nn
+                     (held HOLD seconds, default 0.3)
   cfg OPTION VALUE   set an OSD option in config/SharpMZ2500.CFG before a load (Main reads it when the core
                      starts): bootmode 2500|2000|80b, lines 400|200, keyboard jp|us
 
@@ -76,7 +77,7 @@ def set_option(name, value):
     open(CFG, 'wb').write(v.to_bytes(16, 'little'))
 
 
-def uinput_device(name, product, keys=(), rels=(), abss=()):
+def uinput_device(name, product, keys=(), rels=(), abss=(), vendor=0x1209):
     fd = os.open('/dev/uinput', os.O_WRONLY | os.O_NONBLOCK)
     fcntl.ioctl(fd, UI_SET_EVBIT, EV_SYN)
     if keys:
@@ -92,9 +93,9 @@ def uinput_device(name, product, keys=(), rels=(), abss=()):
         fcntl.ioctl(fd, UI_SET_EVBIT, EV_ABS)
         for code in abss:
             fcntl.ioctl(fd, UI_SET_ABSBIT, code)
-            absmin[code], absmax[code] = -32767, 32767
+            absmin[code], absmax[code] = (-1, 1) if code in (16, 17) else (-32768, 32767)
     # struct uinput_user_dev: name[80], input_id (bustype, vendor, product, version), ff_effects_max, abs[4][64]
-    dev = struct.pack('80sHHHHi', name.encode(), 0x03, 0x1209, product, 1, 0)
+    dev = struct.pack('80sHHHHi', name.encode(), 0x03, vendor, product, 1, 0)
     dev += struct.pack('64i', *absmax) + struct.pack('64i', *absmin) + b'\0' * (2 * 64 * 4)
     os.write(fd, dev)
     fcntl.ioctl(fd, UI_DEV_CREATE)
@@ -135,19 +136,38 @@ class Mouse(Device):
         self.ev(EV_KEY, button, 0); self.syn(); time.sleep(0.1)
 
 
+PAD_MAP = '/media/fat/config/inputs/SharpMZ2500_input_045e_028e_v3.map'
+# MiSTer input map, v3 format: 32-bit codes; 0-3 right/left/down/up (D-pad), 4.. the core's buttons (J1 in CONF_STR:
+# Trigger A = B / east, Trigger B = A / south), then menu buttons
+PAD_MAP_DATA = struct.pack('<12I', 0x321, 0x320, 0x323, 0x322, 0x131, 0x130, 0x134, 0x133, 0x136, 0x137, 0x13a, 0x13b) + \
+    b'\0' * (96 - 48) + struct.pack('<8I', 0x20000, 0x20001, 0x20003, 0x20004, 0x20000, 0x20001, 0, 0)
+
+
+def ensure_pad_map():
+    if not os.path.exists(PAD_MAP):
+        os.makedirs(os.path.dirname(PAD_MAP), exist_ok=True)
+        open(PAD_MAP, 'wb').write(PAD_MAP_DATA)
+
+
 class Pad(Device):
+    # Presents itself as an Xbox 360 pad (045e:028e, the xpad button and axis codes): MiSTer has a default map
+    # for it, an unknown pad would first need mapping in the menu.
     def __init__(self):
-        super().__init__(uinput_device('mister_test pad', 0x2502, keys=(BTN_SOUTH, BTN_EAST, BTN_START, BTN_SELECT),
-                                       abss=(ABS_X, ABS_Y)))
+        super().__init__(uinput_device('Microsoft X-Box 360 pad', 0x028e, vendor=0x045e,
+                                       keys=(BTN_SOUTH, BTN_EAST, 0x133, 0x134, 0x136, 0x137, BTN_SELECT, BTN_START,
+                                             0x13C, 0x13D, 0x13E),
+                                       abss=(ABS_X, ABS_Y, 2, 3, 4, 5, 16, 17)))
 
     def press(self, name, hold):
-        axis = {'left': (ABS_X, -32767), 'right': (ABS_X, 32767), 'up': (ABS_Y, -32767), 'down': (ABS_Y, 32767)}
+        # the D-pad (hat axes, as xpad reports it)
+        axis = {'left': (16, -1), 'right': (16, 1), 'up': (17, -1), 'down': (17, 1)}
         if name in axis:
             code, v = axis[name]
             self.ev(EV_ABS, code, v); self.syn(); time.sleep(hold)
             self.ev(EV_ABS, code, 0); self.syn()
         else:
-            code = {'a': BTN_SOUTH, 'b': BTN_EAST, 'start': BTN_START, 'select': BTN_SELECT}[name]
+            code = int(name, 0) if name.startswith('0x') else \
+                {'a': BTN_SOUTH, 'b': BTN_EAST, 'x': 0x133, 'y': 0x134, 'start': BTN_START, 'select': BTN_SELECT}[name]
             self.ev(EV_KEY, code, 1); self.syn(); time.sleep(hold)
             self.ev(EV_KEY, code, 0); self.syn()
         time.sleep(0.1)
@@ -157,6 +177,7 @@ class Keyboard:
     def __init__(self):
         self.fd = uinput_device('mister_test keyboard', 0x2500, keys=range(1, 256))
         self.mouse = Mouse()
+        ensure_pad_map()       # read by Main when the core loads
         self.pad = Pad()
         time.sleep(2.0)   # let Main find the new devices
 

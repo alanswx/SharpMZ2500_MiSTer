@@ -212,7 +212,8 @@ T80s #(.Mode(0), .T2Write(1), .IOWait(1)) cpu
 assign cpu_pc   = cpu_a;
 assign cpu_m1_n = m1_n;
 
-// Debug snapshot: last opcode fetch address and byte, opcode fetch count, reset / wait / SDRAM client state, page 0
+// Debug snapshot: last opcode fetch address and byte, opcode fetch count, reset / wait / SDRAM client state, audio
+// peak, joystick 1
 reg [15:0] dbg_pc, dbg_m1cnt;
 reg  [7:0] dbg_op;
 reg        dbg_m1_d;
@@ -414,7 +415,16 @@ always @(posedge clk_sys) begin
 end
 
 assign ioctl_wait = ld_pend || (ioctl_download && ram_st != RAM_IDLE);
-assign dbg = {dbg_pc, dbg_op, dbg_m1cnt, 1'b0, ram_st, sys_reset, cpu_reset, wait_n, ram_ready, 2'b00, page[0], ram_q};
+// audio level for the debug snapshot: peak |audio_l| over each 0.1 s, bits 14-7
+reg [22:0] dbg_acnt;
+reg [14:0] dbg_apk, dbg_apk_out;
+wire [15:0] dbg_aabs = audio_l[15] ? -audio_l : audio_l;
+always @(posedge clk_sys) begin
+	dbg_acnt <= dbg_acnt + 23'd1;
+	if (dbg_acnt == 23'd0) begin dbg_apk_out <= dbg_apk; dbg_apk <= 15'd0; end
+	else if (dbg_aabs[14:0] > dbg_apk) dbg_apk <= dbg_aabs[14:0];
+end
+assign dbg = {dbg_pc, dbg_op, dbg_m1cnt, 1'b0, ram_st, sys_reset, cpu_reset, wait_n, ram_ready, dbg_apk_out[14:7], 2'b00, joy0};
 // The CPU waits for its SDRAM read, and on a write while the previous posted write hasn't been issued yet
 // (one-entry write buffer: a PUSH right behind a raster glyph fetch would otherwise overwrite the first byte).
 // The read releases WAIT one clock after ram_q is loaded: T80s latches DI on the clock enable where it sees WAIT
