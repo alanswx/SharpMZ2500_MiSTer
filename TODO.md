@@ -166,9 +166,12 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 - [x] MGL files (`tools/make_mgls.py`) and hardware tests (`tools/mister_test.py`, `tools/mister_run.sh`,
       `tools/mister_tests/`); first MiSTer run 2026-10-08: IPL, Ys III, Dust Box 1-16 + Special 1, MZ-2000/80B BASIC
       from tape, Puckn Boy all work (Dust Box Special 2-3 are data disks: "not master" in BubiZ too)
-- [ ] Keyboard: a symbolic map option for US/PC keyboards (shifted symbols translated, as the old SharpMZ core
-      does), keeping the positional JIS map as the default
-- [ ] Ys III past the intro on hardware (Space/Enter don't skip it: let it run, then start a game)
+- [x] Keyboard: OSD option US (symbols) next to the positional JIS map; all symbols checked in MZ-2000 BASIC on hardware
+- [x] Ys III past the intro on hardware: the game starts in town (Dogi's dialogue)
+- [x] Mouse (Dust Box vol.4 menu: pointer moves, click opens an item), joystick 1 (directions, triggers), sound level
+- [x] Timing margin: CPU read data registered, text setup pipelined (+0.65 ns; the worst path is now in sys/ascal)
+- [ ] Disk writes on hardware (a Ys III save, or a bootable write-test disk: boot record "IPLPRO" at track 0 side 1
+      sector 1, see the IPL's reads of a Dust Box disk)
 - [ ] Release notes, docs for users (ROM file names and where to put them)
 
 ## Later / optional

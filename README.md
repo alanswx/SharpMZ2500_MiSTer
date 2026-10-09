@@ -31,8 +31,10 @@ screenshots through /dev/MiSTer_cmd, OSD options through config/SharpMZ2500.CFG)
 tools/mister_tests/*.txt` runs the plans and fetches the screenshots; `tools/make_mgls.py` writes MGL launchers.
 The core prints a machine snapshot every 0.1 s on its UART (`cat /dev/ttyS1` at 115200 on the MiSTer).
 
-Keyboard: the map is positional (a Japanese MZ keyboard on PC keys, as in CSP), so on a US keyboard letters, digits
-and the control keys are as printed but symbols are not (e.g. `=`, `:` and `*` in BASIC).
+Keyboard: OSD "Keyboard" chooses Japanese (positional, the default: a Japanese MZ keyboard on PC keys, as in CSP) or
+US (the symbols printed on a US keyboard; checked on hardware with every symbol in MZ-2000 BASIC). Also checked on
+hardware: the mouse (Dust Box menus), joystick 1 (directions and both triggers, read through the debug snapshot),
+and sound (the Ys III music level in the debug snapshot).
 
 What exists (`rtl/`): Z80 (T80 v350) with CSP's wait states; the MMU and its reset maps; 256 KB main RAM and the IPL
 and the kanji ROM in SDRAM (the text raster fetches glyphs two cells ahead), ROMs from `boot.rom`; text CRTC and graphics controller with text VRAM, PCG and
