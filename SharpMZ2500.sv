@@ -87,12 +87,12 @@ localparam CONF_STR =
 	"O[7],Keyboard,Japanese (positional),US (symbols);",
 	"O[8],Model (reset),MZ-2500,MZ-2520;",
 	"-;",
-	"J1,Trigger A,Trigger B;",
 	"O[6:5],Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
 	"O[122:121],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"-;",
 	"T[0],Reset;",
 	"R[0],Reset and close OSD;",
+	"J1,Trigger A,Trigger B;",
 	"V,v",`BUILD_DATE
 };
 
