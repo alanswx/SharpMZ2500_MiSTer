@@ -6,7 +6,7 @@
 //          chip is inverted both ways (CSP writes ~data and reads ~data).
 //   DC     bit 7 motor, bits 1-0 drive number; XOR 2 when OPN port A bit 1 (DRSEL) is set (CSP floppy.cpp).
 //   DD     bit 0 side.
-//   DE     bit 0 density (0 = MFM): latched only; the D88 sectors carry their own density.
+//   DE     bit 0 density (0 = MFM): the drive sees only D88 sectors of this density (header +6 = 40h: FM)
 //
 // Two drives (four with the MZ_FOUR_DRIVES macro, files.qip) on the MiSTer image slots, D88 images (3.5" 2DD: 80 cylinders x 2 sides x 16 x 256 bytes, or any
 // layout the D88 track table describes). The chip is Sorgelig's wd1793.sv with FM-7_MiSTer's D77/D88 support,
@@ -114,6 +114,7 @@ generate
 			.addr(reg_a),
 			.din(~io_dout),
 			.crc_report(1'b1),
+			.drive_fm(density),
 			.dout(fdc_dout[d]),
 			.drq(),
 			.intrq(),

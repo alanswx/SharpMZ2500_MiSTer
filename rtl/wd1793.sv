@@ -39,6 +39,8 @@ module wd1793 #(parameter RWMODE=0, EDSK=1, WDT=4096)
 
 	input        wp,          // write protect
 	input        crc_report,  // LOCAL ADDITION (SharpMZ): report sectors dumped with a CRC error (.d77 status, EDSK ST1/ST2)
+	input        drive_fm,    // LOCAL ADDITION (SharpMZ2500): drive density, 1 = FM. Sectors of the other density are
+	                          // not seen (CSP mb8877.cpp: `drive_mfm != sector_mfm` -> skip), so a read finds no record
 
 	// LOCAL ADDITION (FM-7_MiSTer): write-protect flag carried inside the image
 	// itself. .d77 has one at header offset $1a; valid only once the mount-time
@@ -609,7 +611,7 @@ always @(posedge clk_sys) begin
 					// conditional on the command's side-compare bit.  Omitting C
 					// makes a stale track register read whatever sector number happens
 					// to be under the head; Daisenryaku uses that case deliberately.
-					if(rw_type & (edsk_track == disk_track) &
+					if(rw_type & (edsk_track == disk_track) & (edsk_fm == drive_fm) &
 									(edsk_trackf == wdreg_track) &
 									 (edsk_side == side) &
 									 (format | (edsk_sector == wdreg_sector))) begin
@@ -634,7 +636,7 @@ always @(posedge clk_sys) begin
 						state <= STATE_WAIT_READ;
 					end
 					else
-					if(~rw_type & (edsk_track == disk_track) &
+					if(~rw_type & (edsk_track == disk_track) & (edsk_fm == drive_fm) &
 									  (edsk_side == side)) begin
 						read_addr[0] <= edsk_trackf;
 						read_addr[1] <= edsk_sidef;
@@ -642,6 +644,10 @@ always @(posedge clk_sys) begin
 						read_addr[3] <= edsk_sizecode;
 						read_addr[4] <= id_crc[15:8];
 						read_addr[5] <= id_crc[7:0];
+						// LOCAL CHANGE (SharpMZ2500): READ ADDRESS leaves the ID's track address in the sector
+						// register (WD179x data sheet; CSP mb8877.cpp search_addr `secreg = id[0]`). Laydock's
+						// protection takes the head's cylinder from there and retries for ever without it.
+						wdreg_sector <= edsk_trackf;
 						state        <= STATE_READ;
 					end
 					else
@@ -1169,6 +1175,8 @@ wire [1:0] edsk_sizecode;          // sector size: 0=128K, 1=256K, 2=512K, 3=102
 // from the .d77 per-sector status byte, or for EDSK from the FDC status bytes
 // of the sector information block (ST1 bit 5 DE, ST2 bit 5 DD).
 wire [1:0] edsk_crc;
+// LOCAL ADDITION (SharpMZ2500): the sector is FM (.d77 header +6 = $40); EDSK sectors are taken as MFM.
+wire       edsk_fm;
 wire       edsk_side;              // Side number (0 or 1)
 wire [6:0] edsk_track;             // Track number
 wire [7:0] edsk_sector;            // Sector number 0..15
@@ -1208,11 +1216,11 @@ generate
 		// use the core's explicit Cyclone V altsyncram wrapper.
 		reg         edsk_wren = 0;
 		reg  [11:0] edsk_wraddr;
-		reg  [56:0] edsk_wrdata;
-		wire [56:0] edsk_q;
+		reg  [57:0] edsk_wrdata;
+		wire [57:0] edsk_q;
 
 		wd1793_mem #(
-			.DATAWIDTH(57),
+			.DATAWIDTH(58),
 			.ADDRWIDTH(12),
 			.NUMWORDS(4096)
 		) edsk_ram (
@@ -1222,12 +1230,12 @@ generate
 			.wren_a    (edsk_wren),
 			.q_a       (),
 			.address_b (edsk_addr),
-			.data_b    (57'd0),
+			.data_b    (58'd0),
 			.wren_b    (1'b0),
 			.q_b       (edsk_q)
 		);
 
-		assign {edsk_track,edsk_side,edsk_trackf,edsk_sidef,edsk_sector,
+		assign {edsk_fm,edsk_track,edsk_side,edsk_trackf,edsk_sidef,edsk_sector,
 		        edsk_sizecode,edsk_crc,edsk_offset} = edsk_q;
 
 		reg  [7:0] spt[166];
@@ -1322,6 +1330,7 @@ generate
 			reg  [7:0] d_C, d_H, d_R;          // header +0..+2, as recorded
 			reg  [1:0] d_N;                    // header +3, sector size code
 			reg  [1:0] d_crc;                  // header +8, {ID CRC err, data CRC err}
+			reg        d_fm;                   // header +6, density: $40 = FM
 			reg  [7:0] d_slo, d_llo;           // low halves of the 16-bit fields
 			reg  [6:0] d_track;                // physical track, from the table
 			reg        d_side;                 // physical side,  from the table
@@ -1544,6 +1553,7 @@ generate
 										 2: d_R   <= scan_data;              // R
 										 3: d_N   <= scan_data[1:0];         // N
 										 4: d_slo <= scan_data;              // sectors LE lo
+										 6: d_fm  <= (scan_data == 8'h40);   // density
 										 5: if(d_first) begin
 												// Sector count for the whole track,
 												// and only meaningful in the first
@@ -1616,7 +1626,7 @@ generate
 												if(edsk_size < 12'd4000) begin
 													edsk_wren   <= 1;
 													edsk_wraddr <= edsk_size;
-													edsk_wrdata <= {d_track, d_side, d_C, d_H, d_R, d_N, d_crc, scan_addr + 20'd1};
+													edsk_wrdata <= {d_fm, d_track, d_side, d_C, d_H, d_R, d_N, d_crc, scan_addr + 20'd1};
 													edsk_size <= edsk_size + 1'd1;
 `ifdef DEBUG_FDC_SCAN
 													$display("D77SEC %0d %0d %0d %0d %0d %0d %0d %0d",
@@ -1693,7 +1703,7 @@ generate
 													edsk_wraddr <= secpos;
 													// The FDC status the sector was dumped with: a CRC error in the
 													// data field (ST2 DD) or, without it, in the ID field (ST1 DE).
-													edsk_wrdata <= {track,side,trackf,sidef,sector,sizecode,st1_de & ~st2_dd,st2_dd,offset1};
+													edsk_wrdata <= {1'b0,track,side,trackf,sidef,sector,sizecode,st1_de & ~st2_dd,st2_dd,offset1};
 													edsk_size <= edsk_size + 1'd1;
 													offset <= offset + {scan_data, size_lo};
 												end

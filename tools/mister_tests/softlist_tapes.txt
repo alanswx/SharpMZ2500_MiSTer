@@ -1,0 +1,124 @@
+# MZ-2000/2200 tapes from the MAME softlist (MZ-2200 WAVs converted with tools/wav2mzt.py): IPL load at tape speed
+cfg bootmode 2000
+cfg keyboard jp
+load SL/tape_sstream
+wait 12
+key C
+wait 137.5
+shot sl_tape_sstream_t150
+wait 99.5
+shot sl_tape_sstream_t250
+wait 69.5
+shot sl_tape_sstream_t320
+key SPACE 0.3
+wait 5
+shot sl_tape_sstream_space
+load SL/tape_vosque2k
+wait 12
+key C
+wait 137.5
+shot sl_tape_vosque2k_t150
+wait 99.5
+shot sl_tape_vosque2k_t250
+wait 69.5
+shot sl_tape_vosque2k_t320
+key SPACE 0.3
+wait 5
+shot sl_tape_vosque2k_space
+load SL/tape_cnonball
+wait 12
+key C
+wait 137.5
+shot sl_tape_cnonball_t150
+wait 99.5
+shot sl_tape_cnonball_t250
+wait 69.5
+shot sl_tape_cnonball_t320
+key SPACE 0.3
+wait 5
+shot sl_tape_cnonball_space
+load SL/tape_help
+wait 12
+key C
+wait 137.5
+shot sl_tape_help_t150
+wait 99.5
+shot sl_tape_help_t250
+wait 69.5
+shot sl_tape_help_t320
+key SPACE 0.3
+wait 5
+shot sl_tape_help_space
+load SL/tape_hitsujai
+wait 12
+key C
+wait 137.5
+shot sl_tape_hitsujai_t150
+wait 99.5
+shot sl_tape_hitsujai_t250
+wait 69.5
+shot sl_tape_hitsujai_t320
+key SPACE 0.3
+wait 5
+shot sl_tape_hitsujai_space
+load SL/tape_hiyokof
+wait 12
+key C
+wait 137.5
+shot sl_tape_hiyokof_t150
+wait 99.5
+shot sl_tape_hiyokof_t250
+wait 69.5
+shot sl_tape_hiyokof_t320
+key SPACE 0.3
+wait 5
+shot sl_tape_hiyokof_space
+load SL/tape_mj05
+wait 12
+key C
+wait 137.5
+shot sl_tape_mj05_t150
+wait 99.5
+shot sl_tape_mj05_t250
+wait 69.5
+shot sl_tape_mj05_t320
+key SPACE 0.3
+wait 5
+shot sl_tape_mj05_space
+load SL/tape_powrfail
+wait 12
+key C
+wait 137.5
+shot sl_tape_powrfail_t150
+wait 99.5
+shot sl_tape_powrfail_t250
+wait 69.5
+shot sl_tape_powrfail_t320
+key SPACE 0.3
+wait 5
+shot sl_tape_powrfail_space
+load SL/tape_vegecrsh
+wait 12
+key C
+wait 137.5
+shot sl_tape_vegecrsh_t150
+wait 99.5
+shot sl_tape_vegecrsh_t250
+wait 69.5
+shot sl_tape_vegecrsh_t320
+key SPACE 0.3
+wait 5
+shot sl_tape_vegecrsh_space
+load SL/tape_thespidr
+wait 12
+key C
+wait 137.5
+shot sl_tape_thespidr_t150
+wait 99.5
+shot sl_tape_thespidr_t250
+wait 69.5
+shot sl_tape_thespidr_t320
+key SPACE 0.3
+wait 5
+shot sl_tape_thespidr_space
+cfg bootmode 2500
