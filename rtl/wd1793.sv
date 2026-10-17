@@ -498,7 +498,9 @@ always @(posedge clk_sys) begin
 	reg        rot_first;                // the next DRQ is the sector's first byte: put the head there
 	reg        rot_rnf;
 	reg        cmd_e;                    // E flag (head load delay) of the command
-	reg [15:0] rot_t0, rot_lat, drq_tick, seek_lat;
+	reg [15:0] rot_t0, rot_lat, drq_tick;
+	reg  [7:0] rot_otrack;               // head position when the type I command started
+	reg  [1:0] rot_rate;                 // its step rate bits
 	reg [12:0] g_pos;
 	reg  [8:0] g_n;
 	reg [16:0] g_total;
@@ -1139,9 +1141,18 @@ always @(posedge clk_sys) begin
 				begin
 					wait_time <= 4000;
 					state <= STATE_WAIT_2;
-					if(ROT && rot_seek) begin
+					if(ROT && rot_seek) begin : steptime
+						// 6/12/20/30 ms a step (1 MHz controller clock) in byte times, the first 0.5 ms shorter;
+						// disk_track already holds where the command left the head
+						reg  [7:0] steps;
+						reg  [9:0] rate;
+						reg [17:0] t;
+						steps = (disk_track > rot_otrack) ? disk_track - rot_otrack : rot_otrack - disk_track;
+						rate  = (rot_rate == 2'd0) ? 10'd188 : (rot_rate == 2'd1) ? 10'd375 :
+						        (rot_rate == 2'd2) ? 10'd625 : 10'd938;
+						t = steps * rate;
 						rot_t0  <= rtick;
-						rot_lat <= seek_lat;
+						rot_lat <= (steps == 0) ? 16'd1 : (t > 18'd65535) ? 16'hFFFF : t[15:0] - 16'd16;
 						state   <= STATE_ROT_SEEK;
 					end
 				end
@@ -1218,18 +1229,8 @@ always @(posedge clk_sys) begin
 							rot_cmd  <= 0;
 							rot_seek <= ~din[7];
 							cmd_e    <= din[2];
-							begin : steptime
-								reg [7:0]  steps;
-								reg [9:0]  rate;
-								reg [17:0] t;
-								rate  = (din[1:0] == 2'd0) ? 10'd188 : (din[1:0] == 2'd1) ? 10'd375 :
-								        (din[1:0] == 2'd2) ? 10'd625 : 10'd938;
-								steps = (din[7:4] == 4'h0) ? disk_track :
-								        (din[7:4] == 4'h1) ? ((wdreg_data > disk_track) ? wdreg_data - disk_track : disk_track - wdreg_data) :
-								        (next_track != disk_track) ? 8'd1 : 8'd0;
-								t = steps * rate;
-								seek_lat <= (steps == 0) ? 16'd1 : (t > 18'd65535) ? 16'hFFFF : t[15:0] - 16'd16;
-							end
+							rot_otrack <= disk_track;   // the step time is worked out in STATE_WAIT from the distance moved
+							rot_rate   <= din[1:0];
 							case (din[7:4])
 							'h0: 	// RESTORE
 								begin
