@@ -202,7 +202,9 @@ CPU trace from reset matching the reference emulator for the first few thousand 
       with the 20261009 core; Laydock, Macadam, Marchen Veil, Mugen II failed and are fixed in the sim (FDC items above)
 - [x] MZ-2000/2200 tapes on hardware (`softlist_tapes.txt`): Star Stream, Vosque 2000 and the seven MZ-2200 WAVs
       converted with `tools/wav2mzt.py`, plus The Spider: all load and start like BubiZ
-- [ ] Hardware run of the four fixed disk titles with a new build
+- [x] Hardware run of the four fixed disk titles with a new build (20261017 on mister126: Laydock, Macadam, Märchen
+      Veil and Mugen II reach their titles; the other 47 softlist disks match BubiZ up to load-timing offsets; Ys III
+      saves to the user disk)
 - [ ] Harvest (needs MZ-1Z002 MON, never finishes loading in BubiZ either), Jelda/Jelda 2 (WAVs don't decode;
       BubiZ doesn't load Jelda either), Bomberman (data record not found in the WAV)
 - [ ] Titles added to MAME after 0.228 (Galaga, Balloon Fight, Re-Birth, ...): no source found on archive.org
