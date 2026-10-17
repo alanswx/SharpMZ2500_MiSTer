@@ -226,6 +226,8 @@ private:
     FILE     *fwav = nullptr;
     uint32_t  wav_samples = 0;
     double    wav_next = 0;
+    int64_t   wav_acc[2] = {0, 0};
+    uint32_t  wav_n = 0;
     void      wav_close();
 
     // Harness state saved next to the model (--save-state / --load-state)
@@ -466,11 +468,17 @@ void Sim::clock()
     if (opt.dump_cycle && cpu_cycles >= opt.dump_cycle && !dump_done) { top->dbg_dump = 1; dump_done = true; }
     sd_step();
     if (opt_save_pending && sd_state == SD_IDLE) { opt_save_pending = false; save_state(); }
-    if (fwav && started && cycle >= wav_next) {
-        int16_t lr[2] = {(int16_t)top->AUDIO_L, (int16_t)top->AUDIO_R};
-        fwrite(lr, 2, 2, fwav);
-        wav_samples++;
-        wav_next += CLK_HZ / 48000.0;
+    if (fwav && started) {
+        // average over each output sample period (box filter): the SSG's tones reach 62.5 kHz and point sampling
+        // folds them into the audio band, where MiSTer's audio filter would have removed them
+        wav_acc[0] += (int16_t)top->AUDIO_L; wav_acc[1] += (int16_t)top->AUDIO_R; wav_n++;
+        if (cycle >= wav_next) {
+            int16_t lr[2] = {(int16_t)(wav_acc[0] / wav_n), (int16_t)(wav_acc[1] / wav_n)};
+            fwrite(lr, 2, 2, fwav);
+            wav_acc[0] = wav_acc[1] = 0; wav_n = 0;
+            wav_samples++;
+            wav_next += CLK_HZ / 48000.0;
+        }
     }
     if (ftrace && tracing()) {
         bool m1 = top->cpu_m1_n;

@@ -125,7 +125,15 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 
 - [x] jt03 (YM2203) from jt12 (FM-7_MiSTer copy) at 2 MHz; port A output read back (the IPL does read-modify-write), port B switches; timers polled by Ys III
 - [x] Beeper (8255 PC2) mixed in
-- [ ] Volume levels and SSG/FM pitch against BubiZ `-wav`
+- [x] Volume levels and SSG/FM pitch against BubiZ `-wav` (2026-10-17, Nobo, Penguin-kun Wars, Hover Attack, Triton,
+      Murder Club, Laydock): pitch matches; levels fitted on the power spectra (FM x1.0, SSG x0.85 of jt49's
+      {psg,5'b0}, as fmgen's -4 dB SSG predicts). New mixer: jt49 table at 1.5 dB per step (SSG_COMP=0; jt12's default
+      is compressed), SSG + beeper (+-4096) AC-coupled by a running mean, sum x1.25 and saturated (the old sum could
+      wrap). Known differences, both from fmgen: SSG tones above a quarter of its output rate are dropped there (Nobo
+      runs the SSG prescaler at /2: a 15.6 kHz drum tone the core plays as the chip does), and a tone-off channel sits
+      at half the chip's level there
+- [x] Harness `--wav` averages over each 48 kHz period (point sampling folded 15-62 kHz SSG tones into the audio band);
+      `MZ_AUDIO_SPLIT` (sim only) puts FM left and SSG right for level fits
 - [x] `--wav` in the harness
 - [ ] Frequency tests as SharpMZ's `beep_*`/`psg_*`
 

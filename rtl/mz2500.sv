@@ -753,9 +753,10 @@ always @(posedge clk_sys) begin
 	else if (opn_rst_cnt != 10'd0) opn_rst_cnt <= opn_rst_cnt - 10'd1;
 end
 wire        opn_rst = sys_reset || opn_rst_cnt != 10'd0;
-wire signed [15:0] opn_snd;
+wire signed [15:0] opn_fm;
+wire        [9:0] opn_psg;
 
-jt03 opn
+jt03 #(.SSG_COMP(3'b00)) opn     // SSG volume steps of 1.5 dB as the chip (jt12's default table is compressed)
 (
 	.rst(opn_rst),
 	.clk(clk_sys),
@@ -773,17 +774,49 @@ jt03 opn
 	.IOA_oe(opn_pa_oe),
 	.IOB_oe(),
 	.psg_A(), .psg_B(), .psg_C(),
-	.fm_snd(),
-	.psg_snd(),
-	.snd(opn_snd),
+	.fm_snd(opn_fm),
+	.psg_snd(opn_psg),
+	.snd(),
 	.snd_sample(),
 	.debug_view()
 );
 
-// Mix: OPN plus the 1-bit beeper (8255 PC2).
-wire signed [15:0] beep = ppi_pc[2] ? 16'sd4096 : 16'sd0;
-assign audio_l = opn_snd + beep;
-assign audio_r = opn_snd + beep;
+// Mix: FM, SSG and the 1-bit beeper (8255 PC2) at CSP's levels (BubiZ -wav, fitted on six games): fmgen's SSG is
+// set 4 dB under its FM (opn->initialize_sound(..., 0, -8)), so a channel at full volume swings 6892 against jt49's
+// 255 per channel: x27. The beeper is +-4096 (PCM1BIT). The SSG and beeper are one-sided (jt49 channels go 0..level,
+// fmgen's +-level); the MZ-2500's output is AC-coupled, so their DC is taken out here (minus a 7.5 Hz running mean,
+// updated at 48 kHz) and doesn't use up the 16 bits when the FM is loud and the SSG idle. The sum is then x1.25 and
+// saturated: a tone-off SSG channel (drums played on the volume register) sits at the full level, as on the chip,
+// where fmgen has half, and Nobo's drums peak near -1.5 dBFS.
+localparam integer AUD_DIV = CLK_SYS_HZ / 48000;
+reg  [11:0] aud_acc;
+reg         aud_tick;                  // 48 kHz
+always @(posedge clk_sys) begin
+	aud_tick <= 1'b0;
+	if (aud_acc >= AUD_DIV - 1) begin aud_acc <= 12'd0; aud_tick <= 1'b1; end
+	else aud_acc <= aud_acc + 12'd1;
+end
+reg  [16:0] ssg_x;                     // 27 * SSG + beeper: 0..35813
+reg  [26:0] ssg_dc;                    // running mean, 17.10 fixed point
+reg signed [17:0] ssg_ac;
+reg signed [18:0] aud_mix;
+reg signed [15:0] aud_out;
+wire signed [19:0] aud_mixg = aud_mix + (aud_mix >>> 2);
+always @(posedge clk_sys) begin
+	ssg_x   <= {opn_psg, 4'd0} + {opn_psg, 3'd0} + {opn_psg, 1'b0} + opn_psg + (ppi_pc[2] ? 17'd8192 : 17'd0);
+	if (aud_tick) ssg_dc <= ssg_dc + {10'd0, ssg_x} - {10'd0, ssg_dc[26:10]};
+	ssg_ac  <= $signed({1'b0, ssg_x}) - $signed({1'b0, ssg_dc[26:10]});
+	aud_mix <= opn_fm + ssg_ac;
+	aud_out <= (aud_mixg > 20'sd32767) ? 16'sd32767 : (aud_mixg < -20'sd32768) ? -16'sd32768 : aud_mixg[15:0];
+end
+`ifdef MZ_AUDIO_SPLIT
+// sim: FM left, SSG right (level fits against BubiZ)
+assign audio_l = opn_fm;
+assign audio_r = {1'b0, opn_psg, 5'd0};
+`else
+assign audio_l = aud_out;
+assign audio_r = aud_out;
+`endif
 
 // Joystick port EF (CSP joystick.cpp). Write: bits 1-0 / 3-2 trigger outputs of port 1 / 2 (0 pulls the trigger
 // input low), bits 4 / 5 common pins (0 = read the directions), bit 6 selects port 2. Read: bits 3-0 right, left,

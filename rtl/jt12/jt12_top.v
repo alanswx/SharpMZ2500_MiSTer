@@ -78,6 +78,7 @@ parameter use_lfo=1, use_ssg=0, num_ch=6, use_pcm=1;
 parameter use_adpcm=0;
 parameter JT49_DIV=2,
           YM2203_LUMPED=0;
+parameter [2:0] SSG_COMP=3'b01; // jt49 volume table: 0 = 1.5 dB per envelope step (the chip, fmgen), 1-4 compressed
 parameter mask_div=1;
 
 wire flag_A, flag_B, busy;
@@ -456,7 +457,7 @@ endgenerate
 `ifndef NOSSG
 generate
     if( use_ssg==1 ) begin : gen_ssg
-        jt49 #(.COMP(3'b01), .CLKDIV(JT49_DIV), .YM2203_LUMPED(YM2203_LUMPED))
+        jt49 #(.COMP(SSG_COMP), .CLKDIV(JT49_DIV), .YM2203_LUMPED(YM2203_LUMPED))
             u_psg( // note that input ports are not multiplexed
             .rst_n      ( ~rst      ),
             .clk        ( clk       ),    // signal on positive edge
