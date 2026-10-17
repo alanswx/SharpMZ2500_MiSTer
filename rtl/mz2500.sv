@@ -718,7 +718,7 @@ always @(posedge clk_sys) begin
 end
 
 wire [7:0] fdc_din;
-mz2500_fdc fdc
+mz2500_fdc #(.CLK_HZ(CLK_SYS_HZ)) fdc
 (
 	.clk_sys(clk_sys),
 	.reset(sys_reset),

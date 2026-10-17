@@ -108,7 +108,14 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 
 - [x] `wd1793.sv`, `wd1793_mem.v` from SharpMZ_MiSTer, new `rtl/mz2500_fdc.sv`; MB8876 inverted bus at D8-DB
 - [x] Drive select DC (with the OPN DRSEL swap), side DD, density DE latch; D88 via the track table, 2 drives
-- [ ] Drives 3 and 4; density check against the D88 sector flag (CSP 2023)
+- [x] Density check against the D88 sector flag: the drive (DE bit 0) sees only sectors of its density (CSP)
+- [x] Disk rotation as CSP's MB8877 (wd1793 ROT=1): sector positions from the D88 layout (CSP's gaps; tracks holding
+      more than a turn scaled into it), wait for the next sector's data field, one byte per 32 us, READ ADDRESS returns
+      the first ID after the head, RECORD NOT FOUND after five index holes, 6/12/20/30 ms steps. READ ADDRESS leaves
+      the ID's track in the sector register. Laydock, Marchen Veil and Mugen II (long 1024-byte sectors and FM sectors
+      as protection) now boot; disk loading is no longer faster than CSP (Ys III frame 1000 now nearest BubiZ's 1000)
+- [x] Drives 3-4 without a controller instance read back track/sector/data (one chip): Macadam boots
+- [ ] Drives 3 and 4 in the standard build (timing, see Phase 12)
 - [ ] OSD S slots for D88 (and raw 2D/2DD if needed), write back
 - [x] Harness `--fdd`/`--fdd-b`; Ys III boots to its intro
 - [x] Regression test `ys3_1000` (GAMES=1), OSD S0/S1 slots in SharpMZ2500.sv
@@ -187,6 +194,19 @@ CPU trace from reset matching the reference emulator for the first few thousand 
       ~0.2 s holds a few seconds apart in plans
 - [x] mister_run.sh runs plans detached on the MiSTer (nohup) and polls, so a dropped ssh session doesn't stop them
 - [ ] Release notes, docs for users (ROM file names and where to put them)
+
+## MAME software list (2026-10-16)
+
+- [x] All 0.228 `mz2500`, `mz2000_flop`, `mz2000_cass`, `mz2200_cass` sets fetched (software/README.md). 51 disk titles
+      run on hardware (mister126, `tools/mister_tests/softlist_disks.txt`) and in BubiZ, compared at 15-120 s: 47 matched
+      with the 20261009 core; Laydock, Macadam, Marchen Veil, Mugen II failed and are fixed in the sim (FDC items above)
+- [x] MZ-2000/2200 tapes on hardware (`softlist_tapes.txt`): Star Stream, Vosque 2000 and the seven MZ-2200 WAVs
+      converted with `tools/wav2mzt.py`, plus The Spider: all load and start like BubiZ
+- [ ] Hardware run of the four fixed disk titles with a new build
+- [ ] Harvest (needs MZ-1Z002 MON, never finishes loading in BubiZ either), Jelda/Jelda 2 (WAVs don't decode;
+      BubiZ doesn't load Jelda either), Bomberman (data record not found in the WAV)
+- [ ] Titles added to MAME after 0.228 (Galaga, Balloon Fight, Re-Birth, ...): no source found on archive.org
+- [ ] Deeper play tests: titles stop at "hit a key" / drive-select prompts; scripted key presses past them
 
 ## Later / optional
 

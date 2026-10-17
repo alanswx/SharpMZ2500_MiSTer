@@ -22,10 +22,11 @@
 //
 //============================================================================
 
-module wd1793 #(parameter RWMODE=0, EDSK=1, WDT=4096)
+module wd1793 #(parameter RWMODE=0, EDSK=1, WDT=4096, ROT=0)
 (
 	input        clk_sys,     // sys clock
 	input        ce,          // ce at CPU clock rate
+	input        byte_tick,   // LOCAL ADDITION (SharpMZ2500): one clk_sys pulse per disk byte (32 us, 2DD MFM); used with ROT=1
 	input        reset,	     // async reset
 	input        io_en,
 	input        rd,          // i/o read
@@ -253,7 +254,27 @@ typedef enum
 	STATE_ABORT,
 	STATE_WAIT,
 	STATE_WAIT_2,
-	STATE_ENDCOMMAND
+	STATE_ENDCOMMAND,
+
+	// LOCAL ADDITION (SharpMZ2500): disk rotation (ROT=1), see the block comment at rpos
+	STATE_ROT_GEOW,
+	STATE_ROT_GEO0,
+	STATE_ROT_GEO1,
+	STATE_ROT_GEO2,
+	STATE_ROT_GEO3,
+	STATE_ROT_GEO4,
+	STATE_ROT_GEO5,
+	STATE_ROT_GEO6,
+	STATE_ROT_DIV,
+	STATE_ROT_WALK0,
+	STATE_ROT_WALK1,
+	STATE_ROT_WALK2,
+	STATE_ROT_WALK3,
+	STATE_ROT_WALK4,
+	STATE_ROT_END,
+	STATE_ROT_WAIT,
+	STATE_ROT_PRE,
+	STATE_ROT_SEEK
 } io_state_t;
 
 
@@ -377,9 +398,43 @@ always @(posedge clk_sys) begin
 		// it is never reset to 0.
 		if(cnt) cnt <= cnt - 1;
 			else cnt <= 35000;
-		s_index <= (cnt < 100);
+		s_index <= ROT ? (rpos < 13'd156) : (cnt < 100);
 	end
 end
+
+// LOCAL ADDITION (SharpMZ2500): disk rotation, after CSP's MB8877 (mb8877.cpp, disk.cpp), with ROT=1.
+//
+// rpos is the byte under the head (0..TS-1, one byte per byte_tick: 32 us, 300 rpm, 6250 bytes a turn on 2DD) and
+// rtick counts byte ticks, so the controller (which only runs on ce) measures waits as rtick differences. For a .d77
+// image the sector positions are worked out as CSP's DISK::get_track does (the standard gap 3 for 16x256, 9x512 and
+// 5x1024, else gaps fitted to the track, else -- a track holding more than a turn's worth, copy protection -- the
+// raw positions scaled into the turn), from the track's offset, byte extent and declared sector count, which the
+// scanner keeps per track. Like CSP with its default "correct disk timing" off:
+//   READ SECTOR / READ ADDRESS wait until the data field of the next sector to come under the head, then the head is
+//   at the target's data field (ID field for READ ADDRESS) and the bytes follow one per byte time; READ ADDRESS
+//   returns the first ID after the head, so the ID read after a long sector is the one after its end (Laydock,
+//   Marchen Veil and Mugen II check that); RECORD NOT FOUND after five index holes; INDEX is the first 5 ms of a turn;
+//   type I commands step at 6/12/20/30 ms (rate bits, 1 MHz controller clock), the first step 0.5 ms shorter.
+localparam integer TS = 6250;
+reg  [12:0] rpos = 0;
+reg  [15:0] rtick = 0;
+reg         rpos_ld_t = 0, rpos_ld_seen = 0;
+reg  [12:0] rpos_ld_v = 0;
+always @(posedge clk_sys) begin
+	if(ROT && byte_tick) begin
+		rtick <= rtick + 1'd1;
+		rpos  <= (rpos >= TS - 1) ? 13'd0 : rpos + 1'd1;
+	end
+	if(rpos_ld_t != rpos_ld_seen) begin
+		rpos_ld_seen <= rpos_ld_t;
+		rpos         <= (rpos_ld_v >= TS) ? rpos_ld_v - TS[12:0] : rpos_ld_v;
+	end
+end
+reg         rot_tab = 0;                 // the mounted image is a .d77 and the per-track tables below are valid
+reg  [20:0] tt_off;                      // per-track table entries at spt_addr: file offset of the first header,
+reg  [16:0] tt_total;                    // CSP's raw track length (extent + 46 x count + 16),
+reg   [8:0] tt_n;                        // declared sector count,
+reg  [11:0] tt_first;                    // index of the track's first sector in the sector table
 
 // The ID field's CRC, as READ ADDRESS reports it.
 //
@@ -436,6 +491,32 @@ always @(posedge clk_sys) begin
 	reg [9:0] seektimer;
 	reg [7:0] ra_sector;
 	reg       multisector;
+	// rotation (ROT=1)
+	reg        rot_cmd;                  // this type II/III command runs on the rotation model
+	reg        rot_seek;                 // this type I command's busy time is a step time
+	reg        rot_first;                // the next DRQ is the sector's first byte: put the head there
+	reg        rot_rnf;
+	reg        cmd_e;                    // E flag (head load delay) of the command
+	reg [15:0] rot_t0, rot_lat, drq_tick, seek_lat;
+	reg [12:0] g_pos;
+	reg  [8:0] g_n;
+	reg [16:0] g_total;
+	reg [20:0] g_off;
+	reg [11:0] g_first;
+	reg  [7:0] g_cnt;
+	reg        g_inv;
+	reg [12:0] g_pre, g_gap3;
+	reg [16:0] g_den;
+	reg signed [17:0] g_avail;
+	reg  [5:0] w_i;
+	reg [13:0] w_sync;
+	reg [13:0] best_any_d, best_any_data, best_m_d, best_m_pos;
+	reg [11:0] best_m_idx;
+	reg        best_found;
+	reg [26:0] div_n, div_q;
+	reg [16:0] div_d, div_r;
+	reg  [4:0] div_c;
+	io_state_t div_ret;
 	reg       sec_crc;              // the sector being read was dumped with a CRC error
 	reg       write;
 	reg [5:0] ack;
@@ -586,6 +667,13 @@ always @(posedge clk_sys) begin
 						state <= STATE_ENDCOMMAND;
 					end else begin
 						seektimer <= seektimer - 1'b1;
+						if(ROT && EDSK && rot_tab && var_size && ~format) begin
+							// LOCAL ADDITION (SharpMZ2500): rotation model, no fixed search delay
+							byte_addr <= 0;
+							rot_cmd   <= 1;
+							spt_addr  <= (side ? spt_size>>1 : 8'd0) + disk_track;
+							state     <= STATE_ROT_GEOW;
+						end else
 						if(!seektimer) begin
 							byte_addr <= 0;
 							if(var_size) begin
@@ -700,8 +788,15 @@ always @(posedge clk_sys) begin
 				end
 			STATE_READ_1:
 				begin
-					read_timer <= read_timer - 1'b1;
-					if(!read_timer) begin
+					if(read_timer) read_timer <= read_timer - 1'b1;
+					// rotation: one byte per byte time; the first byte puts the head at the field's start
+					if(!read_timer && (!rot_cmd || rot_first || (rtick != drq_tick))) begin
+						drq_tick <= rtick;
+						if(rot_cmd && rot_first) begin
+							rot_first <= 0;
+							rpos_ld_v <= best_m_pos[12:0] + 1'd1;
+							rpos_ld_t <= ~rpos_ld_t;
+						end
 						read_data <= 0;
 						watchdog_set <= 0;
 						s_lostdata <= 0;
@@ -844,10 +939,206 @@ always @(posedge clk_sys) begin
 					state <= STATE_ENDCOMMAND;
 				end
 
+			// ---- LOCAL ADDITION (SharpMZ2500): rotation model (ROT=1) ----
+			STATE_ROT_GEOW: state <= STATE_ROT_GEO0;      // per-track tables and sector count at spt_addr
+			STATE_ROT_GEO0:
+				begin
+					g_pos      <= rpos;
+					rot_t0     <= rtick;
+					g_n        <= |tt_n ? tt_n : {1'b0, edsk_spt};
+					g_total    <= tt_total;
+					g_off      <= tt_off;
+					g_first    <= tt_first;
+					g_cnt      <= edsk_spt;
+					edsk_addr  <= tt_first;
+					w_i        <= 0;
+					best_any_d <= 14'h3FFF;
+					best_m_d   <= 14'h3FFF;
+					best_found <= 0;
+					rot_rnf    <= 0;
+					state      <= STATE_ROT_GEO1;
+				end
+			STATE_ROT_GEO1: state <= STATE_ROT_GEO2;      // first sector's entry
+			STATE_ROT_GEO2:
+				begin
+					// gap 3: CSP's standard values for the first sector's size, else fitted to the track
+					g_avail <= $signed({1'b0, 17'd6250 - 17'd130}) - $signed({1'b0, g_total});
+					if((edsk_sizecode == 2'd1 && g_n == 9'd16) || (edsk_sizecode == 2'd2 && g_n == 9'd9) ||
+					   (edsk_sizecode == 2'd3 && g_n == 9'd5)) begin
+						g_gap3 <= (edsk_sizecode == 2'd1) ? 13'd51 : (edsk_sizecode == 2'd2) ? 13'd80 : 13'd116;
+						state  <= STATE_ROT_GEO4;
+					end else if(g_total >= 17'd6120) begin
+						state  <= STATE_ROT_GEO5;
+					end else begin
+						div_n   <= {10'd0, 17'd6120 - g_total};
+						div_d   <= {8'd0, g_n} + 1'd1;
+						div_q   <= {10'd0, 17'd6120 - g_total};
+						div_r   <= 0;
+						div_c   <= 5'd27;
+						div_ret <= STATE_ROT_GEO3;
+						state   <= STATE_ROT_DIV;
+					end
+				end
+			STATE_ROT_GEO3:
+				begin
+					g_gap3 <= div_q[12:0];
+					state  <= STATE_ROT_GEO4;
+				end
+			STATE_ROT_GEO4:
+				begin
+					// gap 4 = 6250 - total - gap0 - gap1 - gap3 x n must be at least 8 too
+					if(g_gap3 >= 13'd8 && (g_avail - $signed({1'b0, 4'd0, g_gap3} * $signed({1'b0, 8'd0, g_n})) >= 18'sd8)) begin
+						g_pre <= 13'd146;          // gap 0 80, sync 12, index mark 4, gap 1 50
+						g_inv <= 0;
+						state <= STATE_ROT_WALK0;
+					end else begin
+						state <= STATE_ROT_GEO5;
+					end
+				end
+			STATE_ROT_GEO5:
+				begin
+					// equal gaps 0, 1 and 3, else an invalid format
+					g_avail <= $signed({1'b0, 17'd6250}) - $signed({1'b0, g_total});
+					if(g_total >= 17'd6250) begin
+						g_inv <= 1;
+						g_pre <= 13'd32;
+						g_den <= (g_total > 17'd16) ? g_total - 17'd16 : 17'd1;
+						state <= STATE_ROT_WALK0;
+					end else begin
+						div_n   <= {10'd0, 17'd6250 - g_total};
+						div_d   <= {8'd0, g_n} + 2'd3;
+						div_q   <= {10'd0, 17'd6250 - g_total};
+						div_r   <= 0;
+						div_c   <= 5'd27;
+						div_ret <= STATE_ROT_GEO6;
+						state   <= STATE_ROT_DIV;
+					end
+				end
+			STATE_ROT_GEO6:
+				begin
+					if(div_q >= 27'd8 && (g_avail - $signed({1'b0, div_q[16:0]}) * $signed({1'b0, 8'd0, g_n + 2'd2}) >= 18'sd8)) begin
+						g_gap3 <= div_q[12:0];
+						g_pre  <= {div_q[11:0], 1'b0} + 13'd16;
+						g_inv  <= 0;
+					end else begin
+						g_inv <= 1;
+						g_pre <= 13'd32;
+						g_den <= (g_total > 17'd16) ? g_total - 17'd16 : 17'd1;
+					end
+					state <= STATE_ROT_WALK0;
+				end
+			STATE_ROT_DIV:
+				begin
+					// restoring division, one quotient bit per ce
+					if(div_c == 0) state <= div_ret;
+					else begin
+						if({div_r[15:0], div_q[26]} >= div_d) begin
+							div_r <= {div_r[15:0], div_q[26]} - div_d;
+							div_q <= {div_q[25:0], 1'b1};
+						end else begin
+							div_r <= {div_r[15:0], div_q[26]};
+							div_q <= {div_q[25:0], 1'b0};
+						end
+						div_c <= div_c - 1'd1;
+					end
+				end
+			STATE_ROT_WALK0:
+				begin
+					if({2'b0, w_i} >= g_cnt) state <= STATE_ROT_END;
+					else begin
+						edsk_addr <= g_first + w_i;
+						state     <= STATE_ROT_WALK1;
+					end
+				end
+			STATE_ROT_WALK1: state <= STATE_ROT_WALK2;
+			STATE_ROT_WALK2:
+				begin
+					// the sector's raw position: bytes of the sectors before it (data + 62 each, MFM)
+					if(g_inv) begin
+						div_n   <= ((edsk_offset - g_off - 21'd16 + w_i * 6'd46) & 21'h1FFFF) * 27'd6210;
+						div_q   <= ((edsk_offset - g_off - 21'd16 + w_i * 6'd46) & 21'h1FFFF) * 27'd6210;
+						div_d   <= g_den;
+						div_r   <= 0;
+						div_c   <= 5'd27;
+						div_ret <= STATE_ROT_WALK3;
+						state   <= STATE_ROT_DIV;
+					end else begin
+						w_sync <= g_pre + (edsk_offset - g_off - 21'd16 + w_i * 6'd46) + w_i * g_gap3;
+						state  <= STATE_ROT_WALK4;
+					end
+				end
+			STATE_ROT_WALK3:
+				begin
+					w_sync <= g_pre + div_q[13:0];
+					state  <= STATE_ROT_WALK4;
+				end
+			STATE_ROT_WALK4:
+				begin : walk4
+					reg [14:0] am1, d;
+					am1 = {1'b0, w_sync} + 15'd12;
+					d   = am1 - {2'b0, g_pos} - 1'd1;
+					if(d[14]) d = d + TS[14:0];
+					else if(d >= TS) d = d - TS[14:0];
+					// the next sector to come under the head, whatever it is: its data field ends the search
+					if(d[13:0] < best_any_d) begin
+						best_any_d    <= d[13:0];
+						best_any_data <= am1[13:0] + 14'd48;
+					end
+					// the first matching one after the head is the one transferred
+					if((edsk_fm == drive_fm) &&
+					   (~rw_type || ((edsk_trackf == wdreg_track) && (edsk_sector == wdreg_sector))) &&
+					   (d[13:0] < best_m_d)) begin
+						best_m_d   <= d[13:0];
+						best_m_idx <= g_first + w_i;
+						best_m_pos <= rw_type ? am1[13:0] + 14'd48 : am1[13:0] + 14'd4;
+						best_found <= 1;
+					end
+					w_i   <= w_i + 1'd1;
+					state <= STATE_ROT_WALK0;
+				end
+			STATE_ROT_END:
+				begin : rot_end
+					reg signed [15:0] lat;
+					lat = $signed({2'b0, best_any_data}) + 16'sd1 - $signed({3'b0, g_pos});
+					if(lat <= 0) lat = lat + 16'sd6250;
+					if(!best_found) begin
+						rot_rnf <= 1;
+						rot_lat <= 16'd31250 - {3'b0, g_pos} + (cmd_e ? 16'd938 : 16'd0);
+					end else begin
+						rot_lat    <= lat[15:0];
+						edsk_addr  <= best_m_idx;
+						edsk_start <= best_m_idx;
+					end
+					state <= STATE_ROT_WAIT;
+				end
+			STATE_ROT_WAIT:
+				begin
+					if(!ready) state <= STATE_ENDCOMMAND;
+					else if((rtick - rot_t0) >= rot_lat) begin
+						if(rot_rnf) begin
+							if(~format) s_seekerr <= 1;
+							state <= STATE_ENDCOMMAND;
+						end else begin
+							rot_first <= 1;
+							state     <= STATE_ROT_PRE;
+						end
+					end
+				end
+			STATE_ROT_PRE: state <= STATE_SEARCH_1;       // the target's entry is at edsk_q
+			STATE_ROT_SEEK:
+				begin
+					if((rtick - rot_t0) >= rot_lat) state <= STATE_ENDCOMMAND;
+				end
+
 			STATE_WAIT:
 				begin
 					wait_time <= 4000;
 					state <= STATE_WAIT_2;
+					if(ROT && rot_seek) begin
+						rot_t0  <= rtick;
+						rot_lat <= seek_lat;
+						state   <= STATE_ROT_SEEK;
+					end
 				end
 			STATE_WAIT_2:
 				begin
@@ -918,6 +1209,22 @@ always @(posedge clk_sys) begin
 							// flags; this makes the Type I path do it too, at the one
 							// point every command passes through.
 							{s_seekerr, s_crcerr} <= 0;
+							// rotation model: per-command flags; a type I command's busy time is its steps
+							rot_cmd  <= 0;
+							rot_seek <= ~din[7];
+							cmd_e    <= din[2];
+							begin : steptime
+								reg [7:0]  steps;
+								reg [9:0]  rate;
+								reg [17:0] t;
+								rate  = (din[1:0] == 2'd0) ? 10'd188 : (din[1:0] == 2'd1) ? 10'd375 :
+								        (din[1:0] == 2'd2) ? 10'd625 : 10'd938;
+								steps = (din[7:4] == 4'h0) ? disk_track :
+								        (din[7:4] == 4'h1) ? ((wdreg_data > disk_track) ? wdreg_data - disk_track : disk_track - wdreg_data) :
+								        (next_track != disk_track) ? 8'd1 : 8'd0;
+								t = steps * rate;
+								seek_lat <= (steps == 0) ? 16'd1 : (t > 18'd65535) ? 16'hFFFF : t[15:0] - 16'd16;
+							end
 							case (din[7:4])
 							'h0: 	// RESTORE
 								begin
@@ -1240,8 +1547,18 @@ generate
 
 		reg  [7:0] spt[166];
 
+		// LOCAL ADDITION (SharpMZ2500): per-track geometry for the rotation model (ROT=1), same index as spt[]
+		reg [20:0] t_off[166];
+		reg [16:0] t_total[166];
+		reg  [8:0] t_n[166];
+		reg [11:0] t_first[166];
+
 		always @(posedge clk_sys) begin
 			edsk_spt <= spt[spt_addr];
+			tt_off   <= t_off[spt_addr];
+			tt_total <= t_total[spt_addr];
+			tt_n     <= t_n[spt_addr];
+			tt_first <= t_first[spt_addr];
 		end
 
 		reg  [7:0] tpos;
@@ -1330,6 +1647,10 @@ generate
 			reg  [7:0] d_C, d_H, d_R;          // header +0..+2, as recorded
 			reg  [1:0] d_N;                    // header +3, sector size code
 			reg  [1:0] d_crc;                  // header +8, {ID CRC err, data CRC err}
+			reg        d_tvalid;               // rotation tables: a track is open
+			reg  [7:0] d_ti;                   //   its spt[] index
+			reg [20:0] d_toff;                 //   its first header's file offset
+			reg  [8:0] d_tn;                   //   its declared sector count
 			reg        d_fm;                   // header +6, density: $40 = FM
 			reg  [7:0] d_slo, d_llo;           // low halves of the 16-bit fields
 			reg  [6:0] d_track;                // physical track, from the table
@@ -1363,6 +1684,8 @@ generate
 				var_size  <=1;
 
 				fmt      <= FMT_NONE;
+				rot_tab  <= 0;
+				d_tvalid <= 0;
 				edsk_bad <= 0;
 				d_wpb    <= 0;
 				d77_wp   <= 0;
@@ -1465,6 +1788,7 @@ generate
 						end
 						else begin
 							fmt    <= FMT_D77;
+							rot_tab <= 1;
 							d77_wp <= d_wpb;
 						end
 					end
@@ -1530,6 +1854,12 @@ generate
 						// lying count can now walk off its own track.
 						//-----------------------------------------------
 						if((d77_rd < d77_cnt) && (rel == d77_off)) begin
+							// rotation tables: the previous track ends here, this one starts
+							if(d_tvalid) t_total[d_ti] <= scan_addr - d_toff + d_tn * 6'd46 + 17'd16;
+							d_tvalid <= 1;
+							d_ti     <= (d77_idx[0] ? (spt_size >> 1) : 8'd0) + d77_idx[7:1];
+							d_toff   <= scan_addr;
+							t_off[(d77_idx[0] ? (spt_size >> 1) : 8'd0) + d77_idx[7:1]] <= scan_addr;
 							// this byte is header +0 of the track's first sector
 							d_track <= d77_idx[7:1];
 							d_side  <= d77_idx[0];
@@ -1555,6 +1885,8 @@ generate
 										 4: d_slo <= scan_data;              // sectors LE lo
 										 6: d_fm  <= (scan_data == 8'h40);   // density
 										 5: if(d_first) begin
+												d_tn <= (|scan_data[7:1]) ? 9'h1FF : {scan_data[0], d_slo};
+												t_n[d_ti] <= (|scan_data[7:1]) ? 9'h1FF : {scan_data[0], d_slo};
 												// Sector count for the whole track,
 												// and only meaningful in the first
 												// header. Some tools write $1000
@@ -1623,6 +1955,7 @@ generate
 												// found by its physical position and
 												// still reports the lie to READ ADDRESS.
 												// Data begins at the very next byte.
+												if(d_first) t_first[d_ti] <= edsk_size;
 												if(edsk_size < 12'd4000) begin
 													edsk_wren   <= 1;
 													edsk_wraddr <= edsk_size;
@@ -1657,6 +1990,8 @@ generate
 										// tracks are stored back to back, so the
 										// next header starts at the next byte
 										d_st   <= (d_left <= 1) ? 2'd0 : 2'd1;
+										// rotation tables: the track's extent so far (final when the next track starts)
+										if(d_left <= 1) t_total[d_ti] <= scan_addr + 1'd1 - d_toff + d_tn * 6'd46 + 17'd16;
 									end
 								end
 						endcase

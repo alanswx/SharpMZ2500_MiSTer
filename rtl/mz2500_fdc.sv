@@ -17,7 +17,7 @@
 // Copyright (C) 2026 Alan Steremberg. GPL-3.0-or-later (see LICENSE). wd1793.sv: GPL-2.0-or-later.
 //=======================================================================================================
 
-module mz2500_fdc
+module mz2500_fdc #(parameter integer CLK_HZ = 85909091)
 (
 	input         clk_sys,
 	input         reset,
@@ -57,6 +57,15 @@ always @(posedge clk_sys) begin
 end
 
 wire       chip  = io_addr[7:2] == 6'b110110;          // D8-DB
+
+// Disk byte time for the controllers' rotation model: 32 us (2DD, MFM, 300 rpm, 6250 bytes a turn)
+reg [27:0] tick_acc = 0;
+reg        byte_tick = 0;
+always @(posedge clk_sys) begin
+	byte_tick <= 1'b0;
+	if(tick_acc >= CLK_HZ - 31250) begin tick_acc <= tick_acc - (CLK_HZ - 31250); byte_tick <= 1'b1; end
+	else tick_acc <= tick_acc + 31250;
+end
 wire [1:0] reg_a = io_addr[1:0];
 
 reg        motor, side, density;
@@ -103,9 +112,11 @@ generate
 
 		// WDT: 2 MFM byte times (64 us) at the 6 MHz ce: the IPL skips a sector by issuing READ SECTOR and only
 		// waiting for BUSY to drop, which takes ~8 ms on a real drive
-		wd1793 #(.RWMODE(1), .EDSK(1), .WDT(384)) fdc
+		// ROT: sector positions, rotational latency, byte pacing and step times as CSP's MB8877 (see wd1793.sv)
+		wd1793 #(.RWMODE(1), .EDSK(1), .WDT(384), .ROT(1)) fdc
 		(
 			.clk_sys(clk_sys),
+			.byte_tick(byte_tick),
 			.ce(ce_cpu | fdc_prepare[d]),
 			.reset(reset),
 			.io_en(io_en),
@@ -151,7 +162,10 @@ generate
 	end
 endgenerate
 
-wire [7:0] dout_sel = fdc_dout[drive];
+// A drive with no controller instance (3-4 in the standard build) reads NOT READY status, but the track, sector and
+// data registers are the one chip's and read back what was written (every instance gets those writes, so drive 0's
+// copy is current). Macadam writes A5h to the data register with such a drive selected and waits to read it back.
+wire [7:0] dout_sel = (drive < NDRV) ? fdc_dout[drive] : (reg_a == 2'd0) ? 8'h80 : fdc_dout[0];
 assign io_din = ~dout_sel;
 assign busy   = |(fdc_busy & mounted);
 
