@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Convert an MZ-80B/MZ-2000/MZ-2200 cassette WAV to an MZT image (the core's data recorder plays MZT only).
 
-  tools/wav2mzt.py IN.wav OUT.mzt
+  tools/wav2mzt.py [-f N] IN.wav OUT.mzt
 
 MZ-80B format (CSP datarec.cpp for _MZ80B/_MZ2000, rtl/mz2500_cmt.sv): a bit is one high/low cycle, long (about
 667 us) = 1, short (about 333 us) = 0. A record is a gap of short bits, a tape mark (40 long + 40/41 short before the
@@ -9,6 +9,11 @@ header, 20 + 20/21 before the data), then bytes as a long start bit and 8 bits M
 1 bits. Every header (128 bytes) and data block (size from header bytes 12h-13h) found is written back to back, as an
 MZT. Records whose count doesn't match are reported and kept. Loaders with their own tape format (turbo loaders,
 protection) can't be converted this way.
+
+A dropout can merge two short cycles into one long one: the block then loses its framing (no start bit) partway. The
+converter tries turning each 1 in the ten bytes before the break back into 00 and keeps the fixes that give a framed
+block with the right count. When several do, they are listed and the last is used (-f N picks another). Bomberman
+(WB-1003) needs this at byte 5657; the last fix is the one matching the copy of that work area at 1E80h.
 """
 import struct, sys, wave
 
@@ -60,6 +65,20 @@ def bits(per):
     return ''.join('1' if p > th else '0' for p in per), short, long_
 
 
+def repair(b, p, want):
+    """A framed block from bit p after undoing one merged short pair: [(bit, block)] for each fix that works."""
+    q = p
+    while q + 9 <= len(b) and b[q] == '1':
+        q += 9
+    fixes = []
+    for i in range(max(p, q - 90), q + 1):
+        if b[i] == '1':
+            r = read_block(b[:i] + '00' + b[i + 1:], p, want)
+            if r and r[1]:
+                fixes.append((i, r))
+    return fixes
+
+
 def read_block(b, p, want):
     """want bytes and the 16-bit count from bit p: (body, count matches, next bit) or None."""
     data = bytearray()
@@ -69,10 +88,10 @@ def read_block(b, p, want):
         data.append(int(b[p + 1:p + 9], 2))
         p += 9
     body, cnt = bytes(data[:want]), data[want] << 8 | data[want + 1]
-    return body, sum(bin(x).count('1') for x in body) == cnt, p
+    return body, sum(bin(x).count('1') for x in body) & 0xFFFF == cnt, p
 
 
-def decode(b):
+def decode(b, pick=-1):
     recs, i = [], 0
     while True:
         # tape mark: >= 15 long followed by >= 15 short
@@ -100,6 +119,15 @@ def decode(b):
             r = read_block(b, start, want)
             if r and (best is None or (r[1] and not best[1])):
                 best = r
+        if best is None and want != 128:
+            for start in (k, k + 1):
+                fixes = repair(b, start, want)
+                if fixes:
+                    for n, (i, r) in enumerate(fixes):
+                        print('  dropout fix %d: bit %d of byte %d -> 00' % (n, (i - start) % 9, (i - start) // 9))
+                    i, best = fixes[pick]
+                    b = b[:i] + '00' + b[i + 1:]
+                    break
         if best is None:
             i = k
             continue
@@ -110,9 +138,13 @@ def decode(b):
 
 
 def main():
-    per = periods(sys.argv[1])
+    args = sys.argv[1:]
+    pick = -1
+    if args[:1] == ['-f']:
+        pick, args = int(args[1]), args[2:]
+    per = periods(args[0])
     b, short, long_ = bits(per)
-    recs = decode(b)
+    recs = decode(b, pick)
     out, ok, last = bytearray(), True, None
     for kind, body, good in recs:
         if kind == 'hdr':
@@ -129,7 +161,7 @@ def main():
     print('cycles: short %.0f us, long %.0f us; %d records%s' % (short, long_, len(recs), '' if ok else '; errors'))
     if not recs:
         sys.exit('no records found (custom tape format?)')
-    open(sys.argv[2], 'wb').write(out)
+    open(args[1], 'wb').write(out)
     return 0 if ok else 1
 
 

@@ -1,4 +1,5 @@
-# MZ-2000/2200 tapes from the MAME softlist (MZ-2200 WAVs converted with tools/wav2mzt.py): IPL load at tape speed
+# MZ-2000/2200 tapes from the MAME softlist (MZ-2200 WAVs converted with tools/wav2mzt.py; Bomberman with its
+# dropout repair): IPL load at tape speed. Harvest: harvest.txt
 cfg bootmode 2000
 cfg keyboard jp
 load SL/tape_sstream
@@ -122,3 +123,15 @@ key SPACE 0.3
 wait 5
 shot sl_tape_thespidr_space
 cfg bootmode 2500
+load SL/tape_bombrman
+wait 12
+key C
+wait 137.5
+shot sl_tape_bombrman_t150
+wait 99.5
+shot sl_tape_bombrman_t250
+wait 69.5
+shot sl_tape_bombrman_t320
+key SPACE 0.3
+wait 5
+shot sl_tape_bombrman_space

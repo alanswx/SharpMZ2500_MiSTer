@@ -1,0 +1,15 @@
+# Harvest (MZ-2000, colour and green): a single 47 KB record loaded by the IPL (C), title after ~7 min of tape
+cfg bootmode 2000
+cfg keyboard jp
+load SL/tape_harvestc
+wait 12
+key C
+wait 400
+shot sl_tape_harvestc_t410
+wait 60
+shot sl_tape_harvestc_t470
+wait 60
+shot sl_tape_harvestc_t530
+key SPACE 0.3
+wait 5
+shot sl_tape_harvestc_space

@@ -20,5 +20,11 @@ Newer software-list sets on archive.org (searched 2026-10-16): `mame-sl` has `mz
 access-restricted (HTTP 401); the 0.185/0.193/0.202 sets are older than 0.228; the full ROM sets (0.26x-0.289) hold arcade/machine
 ROMs, not software lists; `sharp-mz-2500-1` ("Wizardry #1") is only saved auction pages.
 
+Tapes that MAME marks as not working (2026-10-17): Harvest loads from the IPL (C) on its own, despite the list's "mz1z002
+MON" note (one 47 KB record at 0000, title after about 7 minutes). Bomberman's WAV has one dropout (two short cycles read
+as one long one) at data byte 5657: `tools/wav2mzt.py` repairs it, and the game runs. The Spider's "checksum error" is
+the 16-bit 1-bit count wrapping: the data is good. Jelda and Jelda 2 lack their Monitor TS-2000 bootstrap (MAME: bad
+dump) and can't load.
+
 ROM files the core and the emulators need (MAME name / CSP name):
 `ipl.rom`/`IPL.ROM`, `kanji.rom`/`KANJI.ROM`, `dict.rom`/`DICT.ROM`, `phone.rom`/`PHONE.ROM`, `kanji2.rom`/`KANJI2.ROM`, `ipl2520.rom` (MZ-2520).

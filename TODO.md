@@ -205,8 +205,10 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 - [x] Hardware run of the four fixed disk titles with a new build (20261017 on mister126: Laydock, Macadam, Märchen
       Veil and Mugen II reach their titles; the other 47 softlist disks match BubiZ up to load-timing offsets; Ys III
       saves to the user disk)
-- [ ] Harvest (needs MZ-1Z002 MON, never finishes loading in BubiZ either), Jelda/Jelda 2 (WAVs don't decode;
-      BubiZ doesn't load Jelda either), Bomberman (data record not found in the WAV)
+- [x] Harvest: loads from the IPL alone (not through MZ-1Z002), title and play on hardware (`harvest.txt`)
+- [x] Bomberman: one dropout in the WAV repaired by `tools/wav2mzt.py` (byte 5657); title and play on hardware.
+      The Spider's checksum error was the converter not wrapping the 16-bit count
+- [ ] Jelda/Jelda 2: the WAVs lack the Monitor TS-2000 bootstrap (MAME: bad dump); needs another dump
 - [ ] Titles added to MAME after 0.228 (Galaga, Balloon Fight, Re-Birth, ...): no source found on archive.org
 - [ ] Deeper play tests: titles stop at "hit a key" / drive-select prompts; scripted key presses past them
 
