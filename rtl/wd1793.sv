@@ -269,6 +269,7 @@ typedef enum
 	STATE_ROT_WALK0,
 	STATE_ROT_WALK1,
 	STATE_ROT_WALK2,
+	STATE_ROT_WALK2B,
 	STATE_ROT_WALK3,
 	STATE_ROT_WALK4,
 	STATE_ROT_END,
@@ -510,10 +511,11 @@ always @(posedge clk_sys) begin
 	reg signed [17:0] g_avail;
 	reg  [5:0] w_i;
 	reg [13:0] w_sync;
+	reg [16:0] w_raw;
 	reg [13:0] best_any_d, best_any_data, best_m_d, best_m_pos;
 	reg [11:0] best_m_idx;
 	reg        best_found;
-	reg [26:0] div_n, div_q;
+	reg [26:0] div_q;
 	reg [16:0] div_d, div_r;
 	reg  [4:0] div_c;
 	io_state_t div_ret;
@@ -970,7 +972,6 @@ always @(posedge clk_sys) begin
 					end else if(g_total >= 17'd6120) begin
 						state  <= STATE_ROT_GEO5;
 					end else begin
-						div_n   <= {10'd0, 17'd6120 - g_total};
 						div_d   <= {8'd0, g_n} + 1'd1;
 						div_q   <= {10'd0, 17'd6120 - g_total};
 						div_r   <= 0;
@@ -1005,7 +1006,6 @@ always @(posedge clk_sys) begin
 						g_den <= (g_total > 17'd16) ? g_total - 17'd16 : 17'd1;
 						state <= STATE_ROT_WALK0;
 					end else begin
-						div_n   <= {10'd0, 17'd6250 - g_total};
 						div_d   <= {8'd0, g_n} + 2'd3;
 						div_q   <= {10'd0, 17'd6250 - g_total};
 						div_r   <= 0;
@@ -1053,17 +1053,22 @@ always @(posedge clk_sys) begin
 			STATE_ROT_WALK1: state <= STATE_ROT_WALK2;
 			STATE_ROT_WALK2:
 				begin
-					// the sector's raw position: bytes of the sectors before it (data + 62 each, MFM)
+					// the sector's raw position: bytes of the sectors before it (data + 62 each, MFM); registered here,
+					// scaled or gapped in WALK2B (the RAM output straight into the multiplier missed timing)
+					w_raw <= edsk_offset - g_off - 21'd16 + w_i * 6'd46;
+					state <= STATE_ROT_WALK2B;
+				end
+			STATE_ROT_WALK2B:
+				begin
 					if(g_inv) begin
-						div_n   <= ((edsk_offset - g_off - 21'd16 + w_i * 6'd46) & 21'h1FFFF) * 27'd6210;
-						div_q   <= ((edsk_offset - g_off - 21'd16 + w_i * 6'd46) & 21'h1FFFF) * 27'd6210;
+						div_q   <= w_raw * 27'd6210;
 						div_d   <= g_den;
 						div_r   <= 0;
 						div_c   <= 5'd27;
 						div_ret <= STATE_ROT_WALK3;
 						state   <= STATE_ROT_DIV;
 					end else begin
-						w_sync <= g_pre + (edsk_offset - g_off - 21'd16 + w_i * 6'd46) + w_i * g_gap3;
+						w_sync <= g_pre + w_raw + w_i * g_gap3;
 						state  <= STATE_ROT_WALK4;
 					end
 				end
