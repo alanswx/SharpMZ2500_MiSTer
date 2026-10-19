@@ -216,7 +216,27 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 - [x] Harvest: loads from the IPL alone (not through MZ-1Z002), title and play on hardware (`harvest.txt`)
 - [x] Bomberman: one dropout in the WAV repaired by `tools/wav2mzt.py` (byte 5657); title and play on hardware.
       The Spider's checksum error was the converter not wrapping the 16-bit count
-- [ ] Jelda/Jelda 2: the WAVs lack the Monitor TS-2000 bootstrap (MAME: bad dump); needs another dump
+- [ ] Jelda/Jelda 2: the WAVs lack the Monitor TS-2000 bootstrap (MAME: bad dump). The Bacteria tape (flibact) has
+      that monitor; its L command reads the next file in its own (turbo) format, which an MZT can't hold: Jelda and
+      Bacteria need raw-pulse tape playback (WAV-like) in the data recorder
+
+## MAME 0.289 software list (2026-10-19)
+
+- [x] Sets fetched from the user's download (software/mame0289, software/README.md): 11 new mz2500_flop sets, 15 new
+      mz2000_cass tapes, mz2000_snap (14), mz80b_cass (5), mz80b_flop (2)
+- [x] New disks on hardware (`softlist_disks_0289.txt`): Balloon Fight, Galaga, Hashire Skyline, King Flappy, Lizard,
+      Marvelous, Doukeshi Satsujin Jiken, Re-Birth match BubiZ; Sangokushi drew its title as outlines: RMW latches
+      loaded after the read (fixed, 20261019)
+- [ ] F-2 Grand Prix: MFI (tools/mfm2d88.py decodes it; 40 cylinders at 80-track pitch, a 2D disk); MAME calls it a
+      bad dump (via HxC, 460 bad sectors); boots to "Loading F2 GRAND PRIX", then "Disk Error" in BubiZ too
+- [x] New tapes on hardware (`softlist_tapes_0289.txt`, WAVs through tools/wav2mzt.py): all fifteen load and start,
+      including Polar Star II, Puck Man and Door Door (MAME: not working) and Ice Block (BubiZ hangs on the MZT)
+- [x] mz2000_snap (RAM images run at 0000) as one-record MZTs through the IPL (`softlist_snap.txt`): ten run in BubiZ;
+      Binary Land, Front Line, Wild Western and Xetter 2000 (60 KB or more) never finish loading
+- [ ] Direct RAM-image load from the OSD (snapshots of 60 KB+, Flicky/Champion Pro-Wrestling debug titles)
+- [x] MZ-80B: Disk BASIC SB-6510/6610, BASIC SB-5510 and Vosque from tape in BubiZ; the two DSK disks
+      (tools/dsk2d88.py) are data disks: SB-6510 starts the games disk's menu (`softlist_mz80b.txt` on hardware)
+- [ ] SP-5025 BASIC (never finishes loading, MAME hangs too); SB-6511 "Error 40" at start (MAME: Error 50)
 - [ ] Titles added to MAME after 0.228 (Galaga, Balloon Fight, Re-Birth, ...): no source found on archive.org
 - [ ] Deeper play tests: titles stop at "hit a key" / drive-select prompts; scripted key presses past them
 

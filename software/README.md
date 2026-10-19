@@ -20,6 +20,12 @@ Newer software-list sets on archive.org (searched 2026-10-16): `mame-sl` has `mz
 access-restricted (HTTP 401); the 0.185/0.193/0.202 sets are older than 0.228; the full ROM sets (0.26x-0.289) hold arcade/machine
 ROMs, not software lists; `sharp-mz-2500-1` ("Wizardry #1") is only saved auction pages.
 
+`mame0289/<list>/*.zip`, `mame0289/extracted/` (2026-10-19, from the user's download of "MAME 0.289 Software List ROMs
+(merged)"): mz2500_flop 73 (new: balonfgt, f2gp (MFI: `tools/mfm2d88.py`), galaga, hashires, kingflap, lizard, marvels,
+mclown, rebirth, sangoku; moonchld renamed moonchil), mz2000_cass 31 (15 new, mostly WAV: `tools/wav2mzt.py`, spydaisn is
+FLAC: ffmpeg first), mz2000_snap 16 (raw RAM images, run at 0000), mz80b_cass 5 (MZF = MZT), mz80b_flop 2 (CPC DSK:
+`tools/dsk2d88.py`). scobol/scpmwm are still .hdm. Jelda/Jelda 2 are the same bad dumps.
+
 Tapes that MAME marks as not working (2026-10-17): Harvest loads from the IPL (C) on its own, despite the list's "mz1z002
 MON" note (one 47 KB record at 0000, title after about 7 minutes). Bomberman's WAV has one dropout (two short cycles read
 as one long one) at data byte 5657: `tools/wav2mzt.py` repairs it, and the game runs. The Spider's "checksum error" is
