@@ -1,0 +1,191 @@
+# MZ-2000 tapes new in MAME 0.289 (WAVs converted with tools/wav2mzt.py; MON/LOAD titles with MZ-1Z002/1Z001 in front
+# of the game on one tape). Timings as the BubiZ reference runs.
+cfg bootmode 2000
+cfg keyboard jp
+load SL/tape_amtennis
+wait 12
+key C
+wait 138
+shot sl_tape_amtennis_t150
+wait 119
+shot sl_tape_amtennis_t270
+key SPACE 0.3
+wait 5
+shot sl_tape_amtennis_space
+load SL/tape_gangman
+wait 12
+key C
+wait 138
+shot sl_tape_gangman_t150
+wait 119
+shot sl_tape_gangman_t270
+key SPACE 0.3
+wait 5
+shot sl_tape_gangman_space
+load SL/tape_itasand
+wait 12
+key C
+wait 138
+shot sl_tape_itasand_t150
+wait 119
+shot sl_tape_itasand_t270
+key SPACE 0.3
+wait 5
+shot sl_tape_itasand_space
+load SL/tape_justice
+wait 12
+key C
+wait 138
+shot sl_tape_justice_t150
+wait 119
+shot sl_tape_justice_t270
+key SPACE 0.3
+wait 5
+shot sl_tape_justice_space
+load SL/tape_plrstar2
+wait 12
+key C
+wait 138
+shot sl_tape_plrstar2_t150
+wait 119
+shot sl_tape_plrstar2_t270
+key SPACE 0.3
+wait 5
+shot sl_tape_plrstar2_space
+load SL/tape_suprdoor
+wait 12
+key C
+wait 138
+shot sl_tape_suprdoor_t150
+wait 119
+shot sl_tape_suprdoor_t270
+key SPACE 0.3
+wait 5
+shot sl_tape_suprdoor_space
+load SL/tape_zerofght
+wait 12
+key C
+wait 138
+shot sl_tape_zerofght_t150
+wait 119
+shot sl_tape_zerofght_t270
+key SPACE 0.3
+wait 5
+shot sl_tape_zerofght_space
+load SL/tape_flightsim
+wait 12
+key C
+wait 138
+shot sl_tape_flightsim_t150
+wait 119
+shot sl_tape_flightsim_t270
+key SPACE 0.3
+wait 5
+shot sl_tape_flightsim_space
+load SL/tape_spacebee
+wait 12
+key C
+wait 136
+shot sl_tape_spacebee_t150
+wait 10
+type 1\n
+wait 40
+shot sl_tape_spacebee_t200
+wait 40
+key SPACE 0.3
+wait 10
+shot sl_tape_spacebee_space
+load SL/tape_iceblock
+wait 12
+key C
+wait 288
+shot sl_tape_iceblock_t300
+wait 200
+shot sl_tape_iceblock_t500
+load SL/tape_doordoor
+wait 12
+key C
+wait 318
+shot sl_tape_doordoor_basic
+type MON\n
+wait 3
+type L\n
+wait 3
+type DOOR DOOR\n
+wait 300
+shot sl_tape_doordoor_t650
+wait 100
+shot sl_tape_doordoor_t750
+key SPACE 0.3
+wait 5
+shot sl_tape_doordoor_space
+load SL/tape_kyofual
+wait 12
+key C
+wait 318
+shot sl_tape_kyofual_basic
+type MON\n
+wait 3
+type L\n
+wait 3
+type KYOFU NO ALIEN\n
+wait 300
+shot sl_tape_kyofual_t650
+wait 100
+shot sl_tape_kyofual_t750
+key SPACE 0.3
+wait 5
+shot sl_tape_kyofual_space
+load SL/tape_puckman
+wait 12
+key C
+wait 318
+shot sl_tape_puckman_basic
+type MON\n
+wait 3
+type L\n
+wait 3
+type PUCK MAN 80B\n
+wait 300
+shot sl_tape_puckman_t650
+wait 100
+shot sl_tape_puckman_t750
+key SPACE 0.3
+wait 5
+shot sl_tape_puckman_space
+load SL/tape_spydaisn
+wait 12
+key C
+wait 318
+shot sl_tape_spydaisn_basic
+type LOAD\n
+wait 14
+type LOAD\n
+wait 410
+shot sl_tape_spydaisn_loaded
+type RUN\n
+wait 40
+shot sl_tape_spydaisn_run
+wait 100
+shot sl_tape_spydaisn_t900
+key SPACE 0.3
+wait 5
+shot sl_tape_spydaisn_space
+load SL/tape_walkwan
+wait 12
+key C
+wait 318
+shot sl_tape_walkwan_basic
+type LOAD\n
+wait 14
+type LOAD\n
+wait 410
+shot sl_tape_walkwan_loaded
+type RUN\n
+wait 40
+shot sl_tape_walkwan_run
+wait 100
+shot sl_tape_walkwan_t900
+key SPACE 0.3
+wait 5
+shot sl_tape_walkwan_space
