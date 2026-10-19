@@ -461,7 +461,7 @@ mz2500_video video
 	.mem_off(cur_off),
 	.mem_din(cpu_dout),
 	.mem_wr_stb(mem_wr_end),
-	.mem_rd_stb(mem_rd_end),
+	.mem_rd(mem_rd),
 	.mem_dout(vid_mem_dout),
 	.gv_busy(gv_busy),
 

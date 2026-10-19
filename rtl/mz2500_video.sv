@@ -40,7 +40,7 @@ module mz2500_video
 	input     [12:0] mem_off,
 	input      [7:0] mem_din,
 	input            mem_wr_stb,
-	input            mem_rd_stb,
+	input            mem_rd,          // CPU memory read in progress (level)
 	output reg [7:0] mem_dout,
 	output           gv_busy,         // graphics clear in progress (CPU GVRAM accesses wait)
 
@@ -321,7 +321,10 @@ always @(posedge clk) begin
 		vblank_g_d <= vblank_g;
 		if (vblank_g && !vblank_g_d) clear_flag <= 1'b0;
 
-		if (mem_rd_stb && is_rmw) begin
+		// the plane latches follow the RMW read while it lasts: loaded at the end of the read (one clock after RD
+		// rises) they took the RAM output of whatever the address had become, and Sangokushi, which redraws a byte
+		// from the latches (ld a,(hl) then IN from BC-BE), drew only the edges of its title
+		if (mem_rd && is_rmw) begin
 			latch[0] <= rb; latch[1] <= rr; latch[2] <= rg; latch[3] <= ri;
 		end
 
