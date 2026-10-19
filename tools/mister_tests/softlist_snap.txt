@@ -1,0 +1,84 @@
+# MZ-2000 snapshots (MAME 0.289 mz2000_snap: raw RAM images run from 0000) wrapped as one-record MZTs (load and
+# exec 0000) and loaded by the IPL. The four of 60 KB or more never finish loading (BubiZ too) and are left out.
+cfg bootmode 2000
+cfg keyboard jp
+load SL/tape_snap_dawnptrl
+wait 12
+key C
+wait 318
+shot sl_snap_dawnptrl
+key SPACE 0.3
+wait 8
+shot sl_snap_dawnptrl_space
+load SL/tape_snap_mahjong
+wait 12
+key C
+wait 228
+shot sl_snap_mahjong
+key SPACE 0.3
+wait 8
+shot sl_snap_mahjong_space
+load SL/tape_snap_mariosp
+wait 12
+key C
+wait 328
+shot sl_snap_mariosp
+key SPACE 0.3
+wait 8
+shot sl_snap_mariosp_space
+load SL/tape_snap_xeter2k2
+wait 12
+key C
+wait 318
+shot sl_snap_xeter2k2
+key SPACE 0.3
+wait 8
+shot sl_snap_xeter2k2_space
+load SL/tape_snap_cloudkdm
+wait 12
+key C
+wait 418
+shot sl_snap_cloudkdm
+key SPACE 0.3
+wait 8
+shot sl_snap_cloudkdm_space
+load SL/tape_snap_falcadv
+wait 12
+key C
+wait 418
+shot sl_snap_falcadv
+key SPACE 0.3
+wait 8
+shot sl_snap_falcadv_space
+load SL/tape_snap_flicky
+wait 12
+key C
+wait 418
+shot sl_snap_flicky
+key SPACE 0.3
+wait 8
+shot sl_snap_flicky_space
+load SL/tape_snap_lucy
+wait 12
+key C
+wait 418
+shot sl_snap_lucy
+key SPACE 0.3
+wait 8
+shot sl_snap_lucy_space
+load SL/tape_snap_plazmaln
+wait 12
+key C
+wait 518
+shot sl_snap_plazmaln
+key SPACE 0.3
+wait 8
+shot sl_snap_plazmaln_space
+load SL/tape_snap_undrgrnd
+wait 12
+key C
+wait 418
+shot sl_snap_undrgrnd
+key SPACE 0.3
+wait 8
+shot sl_snap_undrgrnd_space

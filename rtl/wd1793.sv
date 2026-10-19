@@ -510,6 +510,15 @@ always @(posedge clk_sys) begin
 	reg        g_inv;
 	reg [12:0] g_pre, g_gap3;
 	reg [16:0] g_den;
+	// gap 3 x n and the equal gap x (n + 2), registered free-running (no state decode on the DSP's enable, timing);
+	// GEO4 and GEO6 wait a clock for them (g_mw)
+	reg [21:0] g_mul4;
+	reg [26:0] g_mul6;
+	reg        g_mw;
+	always @(posedge clk_sys) begin
+		g_mul4 <= g_gap3 * g_n;
+		g_mul6 <= div_q[16:0] * (g_n + 2'd2);
+	end
 	reg signed [17:0] g_avail;
 	reg  [5:0] w_i;
 	reg [13:0] w_sync;
@@ -990,7 +999,9 @@ always @(posedge clk_sys) begin
 			STATE_ROT_GEO4:
 				begin
 					// gap 4 = 6250 - total - gap0 - gap1 - gap3 x n must be at least 8 too
-					if(g_gap3 >= 13'd8 && (g_avail - $signed({1'b0, 4'd0, g_gap3} * $signed({1'b0, 8'd0, g_n})) >= 18'sd8)) begin
+					g_mw <= ~g_mw;
+					if(!g_mw) ;
+					else if(g_gap3 >= 13'd8 && (g_avail - $signed({1'b0, g_mul4}) >= 18'sd8)) begin
 						g_pre <= 13'd146;          // gap 0 80, sync 12, index mark 4, gap 1 50
 						g_inv <= 0;
 						state <= STATE_ROT_WALK0;
@@ -1018,16 +1029,20 @@ always @(posedge clk_sys) begin
 				end
 			STATE_ROT_GEO6:
 				begin
-					if(div_q >= 27'd8 && (g_avail - $signed({1'b0, div_q[16:0]}) * $signed({1'b0, 8'd0, g_n + 2'd2}) >= 18'sd8)) begin
-						g_gap3 <= div_q[12:0];
-						g_pre  <= {div_q[11:0], 1'b0} + 13'd16;
-						g_inv  <= 0;
-					end else begin
-						g_inv <= 1;
-						g_pre <= 13'd32;
-						g_den <= (g_total > 17'd16) ? g_total - 17'd16 : 17'd1;
+					g_mw <= ~g_mw;
+					if(!g_mw) ;
+					else begin
+						if(div_q >= 27'd8 && (g_avail - $signed({1'b0, g_mul6}) >= 18'sd8)) begin
+							g_gap3 <= div_q[12:0];
+							g_pre  <= {div_q[11:0], 1'b0} + 13'd16;
+							g_inv  <= 0;
+						end else begin
+							g_inv <= 1;
+							g_pre <= 13'd32;
+							g_den <= (g_total > 17'd16) ? g_total - 17'd16 : 17'd1;
+						end
+						state <= STATE_ROT_WALK0;
 					end
-					state <= STATE_ROT_WALK0;
 				end
 			STATE_ROT_DIV:
 				begin
