@@ -510,15 +510,11 @@ always @(posedge clk_sys) begin
 	reg        g_inv;
 	reg [12:0] g_pre, g_gap3;
 	reg [16:0] g_den;
-	// gap 3 x n and the equal gap x (n + 2), registered free-running (no state decode on the DSP's enable, timing);
+	// gap 3 x n and the equal gap x (n + 2), registered every clock (no state decode on the DSP's enable, timing);
 	// GEO4 and GEO6 wait a clock for them (g_mw)
 	reg [21:0] g_mul4;
 	reg [26:0] g_mul6;
 	reg        g_mw;
-	always @(posedge clk_sys) begin
-		g_mul4 <= g_gap3 * g_n;
-		g_mul6 <= div_q[16:0] * (g_n + 2'd2);
-	end
 	reg signed [17:0] g_avail;
 	reg  [5:0] w_i;
 	reg [13:0] w_sync;
@@ -546,6 +542,9 @@ always @(posedge clk_sys) begin
 	// `--x-initial fast`), which is what the have_image gate below relies on.
 	reg [2:0] old_disk_index;
 	reg       have_image;
+
+	g_mul4 <= g_gap3 * g_n;
+	g_mul6 <= div_q[16:0] * (g_n + 2'd2);
 
 	if(RWMODE) begin
 		old_mounted <= img_mounted;
