@@ -23,6 +23,7 @@
 #include <sys/stat.h>
 
 #include "Vtop.h"
+#include "Vtop___024root.h"
 #include "verilated.h"
 #include "verilated_save.h"
 
@@ -60,6 +61,9 @@ struct Options {
     std::string ipl_file, kanji_file;     // --ipl / --kanji: separate ROM files
     std::string fdd[2];                   // --fdd / --fdd-b: D88 images in drives 1 and 2
     bool        fdd_readonly = false;     // --fdd-readonly: never write back to the image files
+    uint32_t    ram_fill = 0;             // --ram-fill SEED: power on with pseudo-random SDRAM (a MiSTer keeps the last core's)
+    uint32_t    fdd_delay = 0;            // --fdd-delay N: mount the disks at frame N (an MGL mounts ~1 s after the core starts)
+    uint32_t    sd_latency = 0;           // --sd-latency N: clocks from a block request to sd_ack (the HPS takes ~0.1-1 ms)
     std::string wav_file;                 // --wav: audio output, 48 kHz 16-bit stereo
     std::string tape_file;                // --tape: MZT image (ioctl index 1)
     int         boot_mode = 0;            // --boot-mode 2500|2000|80b
@@ -91,6 +95,9 @@ static void usage()
 "  --trace-io FILE        each I/O write: frame,pc,port,data\n"
 "  --trace-from N         start tracing at frame N; --trace-to N stops after frame N\n"
 "  --rom FILE             boot.rom image: IPL at 000000, kanji ROM at 010000 (tools/make_bootrom.sh)\n"
+"  --ram-fill SEED        power on with pseudo-random SDRAM contents (the MiSTer's SDRAM keeps the previous core's data)\n"
+"  --fdd-delay N          mount the --fdd images at frame N instead of at power-on (an MGL mounts ~1 s late)\n"
+"  --sd-latency N         clocks from a disk block request to sd_ack (default 0; the MiSTer's HPS takes ~0.1-1 ms)\n"
 "  --fdd FILE             D88 image in drive 1; --fdd-b FILE: drive 2; --fdd-readonly: don't write to them\n"
 "  --save-state N:FILE    save the machine state at the start of frame N; --load-state FILE resumes from it\n"
 "                         (give the same --fdd/--fdd-b images; frame numbers continue)\n"
@@ -151,6 +158,9 @@ static bool parse_args(int argc, char **argv, Options &o)
         else if (a == "--fdd") o.fdd[0] = next();
         else if (a == "--fdd-b") o.fdd[1] = next();
         else if (a == "--fdd-readonly") o.fdd_readonly = true;
+        else if (a == "--ram-fill") o.ram_fill = parse_num(next());
+        else if (a == "--fdd-delay") o.fdd_delay = parse_num(next());
+        else if (a == "--sd-latency") o.sd_latency = parse_num(next());
         else if (a == "--wav") o.wav_file = next();
         else if (a == "--tape") o.tape_file = next();
         else if (a == "--boot-mode") { std::string m = next(); o.boot_mode = (m == "2000") ? 1 : (m == "80b" || m == "80B") ? 2 : 0; }
@@ -217,6 +227,8 @@ private:
     FILE     *fdd[2] = {nullptr, nullptr};
     uint64_t  fdd_size[2] = {0, 0};
     enum { SD_IDLE, SD_READ, SD_READ_END, SD_WRITE } sd_state = SD_IDLE;
+    uint32_t  sd_wait = 0;
+    bool      fdd_late_done = false;
     int       sd_slot = 0, sd_idx = 0;
     uint32_t  sd_lba = 0;
     uint8_t   sd_data[512];
@@ -259,6 +271,8 @@ void Sim::sd_step()
     case SD_IDLE:
         for (int k = 0; k < 2; k++) {
             if (!fdd[k] || !(req_rd(k) || req_wr(k))) continue;
+            if (sd_wait++ < opt.sd_latency) break;
+            sd_wait = 0;
             sd_slot = k;
             sd_lba = k ? top->fdd_lba1 : top->fdd_lba0;
             sd_idx = 0;
@@ -615,11 +629,16 @@ int Sim::run()
     top->ioctl_download = 0; top->ioctl_wr = 0;
     for (int i = 0; i < 256; i++) clock();
     // As on the MiSTer: Main holds the core in reset (status bit 0) while it sends boot.rom, then releases it.
+    if (opt.ram_fill) {
+        uint32_t x = opt.ram_fill;
+        auto &m = top->rootp->top__DOT__sdram__DOT__mem;
+        for (size_t i = 0; i < m.size(); i++) { x ^= x << 13; x ^= x >> 17; x ^= x << 5; m[i] = (uint8_t)x; }
+    }
     if (!load_roms()) return 2;
     for (int i = 0; i < 256; i++) clock();
     top->reset = 0;
     for (int k = 0; k < 2; k++)
-        if (!opt.fdd[k].empty() && !mount_fdd(k)) return 2;
+        if (!opt.fdd_delay && !opt.fdd[k].empty() && !mount_fdd(k)) return 2;
     if (!opt.tape_file.empty()) {
         std::vector<uint8_t> t;
         if (!read_file(opt.tape_file, t)) { fprintf(stderr, "cannot read %s\n", opt.tape_file.c_str()); return 2; }
@@ -638,7 +657,14 @@ int Sim::run()
     auto range = ps2_schedule.equal_range(0);
     for (auto it = range.first; it != range.second; ++it) ps2_queue.push_back(it->second);
 
-    while (frame <= opt.stop_frame && !Verilated::gotFinish()) clock();
+    while (frame <= opt.stop_frame && !Verilated::gotFinish()) {
+        clock();
+        if (!fdd_late_done && opt.fdd_delay && frame == opt.fdd_delay) {
+            fdd_late_done = true;
+            for (int k = 0; k < 2; k++)
+                if (!opt.fdd[k].empty() && !mount_fdd(k)) return 2;
+        }
+    }
     return finish();
 }
 

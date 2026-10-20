@@ -24,7 +24,7 @@ ROMs, not software lists; `sharp-mz-2500-1` ("Wizardry #1") is only saved auctio
 (merged)"): mz2500_flop 73 (new: balonfgt, f2gp (MFI: `tools/mfm2d88.py`), galaga, hashires, kingflap, lizard, marvels,
 mclown, rebirth, sangoku; moonchld renamed moonchil), mz2000_cass 31 (15 new, mostly WAV: `tools/wav2mzt.py`, spydaisn is
 FLAC: ffmpeg first), mz2000_snap 16 (raw RAM images, run at 0000), mz80b_cass 5 (MZF = MZT), mz80b_flop 2 (CPC DSK:
-`tools/dsk2d88.py`). scobol/scpmwm are still .hdm. Jelda/Jelda 2 are the same bad dumps.
+`tools/dsk2d88.py`; the games disk boots by itself in MZ-80B mode, so mount it only without a tape BASIC). scobol/scpmwm are still .hdm. Jelda/Jelda 2 are the same bad dumps.
 
 Tapes that MAME marks as not working (2026-10-17): Harvest loads from the IPL (C) on its own, despite the list's "mz1z002
 MON" note (one 47 KB record at 0000, title after about 7 minutes). Bomberman's WAV has one dropout (two short cycles read

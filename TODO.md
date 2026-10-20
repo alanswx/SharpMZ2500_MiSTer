@@ -231,12 +231,17 @@ CPU trace from reset matching the reference emulator for the first few thousand 
       bad dump (via HxC, 460 bad sectors); boots to "Loading F2 GRAND PRIX", then "Disk Error" in BubiZ too
 - [x] New tapes on hardware (`softlist_tapes_0289.txt`, WAVs through tools/wav2mzt.py): all fifteen load and start,
       including Polar Star II, Puck Man and Door Door (MAME: not working) and Ice Block (BubiZ hangs on the MZT)
-- [x] mz2000_snap (RAM images run at 0000) as one-record MZTs through the IPL (`softlist_snap.txt`): ten run in BubiZ;
-      Binary Land, Front Line, Wild Western and Xetter 2000 (60 KB or more) never finish loading
+- [x] mz2000_snap (RAM images run at 0000) as one-record MZTs through the IPL (`softlist_snap.txt`): ten run in BubiZ
+      and on hardware; Binary Land, Front Line, Wild Western and Xetter 2000 (60 KB or more) never finish loading
 - [ ] Direct RAM-image load from the OSD (snapshots of 60 KB+, Flicky/Champion Pro-Wrestling debug titles)
-- [x] MZ-80B: Disk BASIC SB-6510/6610, BASIC SB-5510 and Vosque from tape in BubiZ; the two DSK disks
-      (tools/dsk2d88.py) are data disks: SB-6510 starts the games disk's menu (`softlist_mz80b.txt` on hardware)
-- [ ] SP-5025 BASIC (never finishes loading, MAME hangs too); SB-6511 "Error 40" at start (MAME: Error 50)
+- [x] MZ-80B on hardware (`softlist_mz80b.txt`): BASIC SB-5510, Vosque and Disk BASIC SB-6510/6610/6511 from tape
+      (no disk mounted: the IPL boots a disk first); the games disk (tools/dsk2d88.py) boots by itself to its
+      DISK-STARTUP menu, and Space-Bee runs
+- [x] Main RAM cleared at core load (20261019b): the SDRAM keeps the previous core's data, and the games disk's
+      STARTUP hung or drew garbage on hardware unless RAM started zero, as in BubiZ, MAME and the sim (reproduced with
+      the sim's `--ram-fill`)
+- [ ] SP-5025 BASIC (never finishes loading, MAME hangs too); SB-6511 "Error 40" at start in BubiZ, "Error 50" on the
+      core with no disk (MAME: Error 50)
 - [ ] Titles added to MAME after 0.228 (Galaga, Balloon Fight, Re-Birth, ...): no source found on archive.org
 - [ ] Deeper play tests: titles stop at "hit a key" / drive-select prompts; scripted key presses past them
 

@@ -1,47 +1,56 @@
-# MZ-80B mode (MAME 0.289 mz80b_cass, mz80b_flop): BASIC SB-5510 and Vosque from tape; Disk BASIC SB-6510/6610/6511 from
-# tape with the MZ-80B games disk (tools/dsk2d88.py) in drive 1: SB-6510 starts the disk's menu (BubiZ)
+# MZ-80B mode (MAME 0.289 mz80b_cass, mz80b_flop): BASIC SB-5510, Vosque and Disk BASIC SB-6510/6610/6511 from tape
+# (no disk: with a disk in drive 1 the IPL boots it instead); the games disk (tools/dsk2d88.py) boots by itself to its
+# DISK-STARTUP menu: UP x8 to SPACE-BEE, RETURN (BubiZ: key help screen, then the game)
 cfg bootmode 80b
 cfg keyboard jp
 load SL/80b_sb5510
-wait 6
+wait 12
 key C
-wait 330
-shot sl_80b_sb5510_t336
-wait 30
-shot sl_80b_sb5510_t366
+wait 160
+shot sl_80b_sb5510
 load SL/80b_vosque
-wait 6
+wait 12
 key C
-wait 330
-shot sl_80b_vosque_t336
-wait 30
-shot sl_80b_vosque_t366
+wait 220
+shot sl_80b_vosque
 load SL/80b_sb6510
-wait 6
+wait 12
 key C
-wait 330
-shot sl_80b_sb6510_t336
-wait 30
-shot sl_80b_sb6510_t366
+wait 260
+shot sl_80b_sb6510
 load SL/80b_sb6610
-wait 6
+wait 12
 key C
-wait 330
-shot sl_80b_sb6610_t336
-wait 30
-shot sl_80b_sb6610_t366
+wait 260
+shot sl_80b_sb6610
 load SL/80b_sb6511
-wait 6
+wait 12
 key C
-wait 330
-shot sl_80b_sb6511_t336
-wait 30
-shot sl_80b_sb6511_t366
-load SL/80b_sb6510
-wait 6
-key C
-wait 340
-type DIR\n
-wait 20
-shot sl_80b_sb6510_dir
+wait 260
+shot sl_80b_sb6511
+load SL/80b_games
+wait 12
+shot sl_80b_games_menu
+key UP
+wait 0.5
+key UP
+wait 0.5
+key UP
+wait 0.5
+key UP
+wait 0.5
+key UP
+wait 0.5
+key UP
+wait 0.5
+key UP
+wait 0.5
+key UP
+wait 0.5
+wait 1
+key ENTER
+wait 7
+shot sl_80b_games_bee_keys
+wait 12
+shot sl_80b_games_bee
 cfg bootmode 2500

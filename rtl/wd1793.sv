@@ -272,6 +272,7 @@ typedef enum
 	STATE_ROT_WALK2B,
 	STATE_ROT_WALK3,
 	STATE_ROT_WALK4,
+	STATE_ROT_WALK5,
 	STATE_ROT_END,
 	STATE_ROT_WAIT,
 	STATE_ROT_PRE,
@@ -518,6 +519,7 @@ always @(posedge clk_sys) begin
 	reg signed [17:0] g_avail;
 	reg  [5:0] w_i;
 	reg [13:0] w_sync;
+	reg [13:0] w_am1, w_d;
 	reg [16:0] w_raw;
 	reg [13:0] best_any_d, best_any_data, best_m_d, best_m_pos;
 	reg [11:0] best_m_idx;
@@ -1095,23 +1097,30 @@ always @(posedge clk_sys) begin
 				end
 			STATE_ROT_WALK4:
 				begin : walk4
+					// the address mark's position and its distance after the head (registered: timing)
 					reg [14:0] am1, d;
 					am1 = {1'b0, w_sync} + 15'd12;
 					d   = am1 - {2'b0, g_pos} - 1'd1;
 					if(d[14]) d = d + TS[14:0];
 					else if(d >= TS) d = d - TS[14:0];
+					w_am1 <= am1[13:0];
+					w_d   <= d[13:0];
+					state <= STATE_ROT_WALK5;
+				end
+			STATE_ROT_WALK5:
+				begin
 					// the next sector to come under the head, whatever it is: its data field ends the search
-					if(d[13:0] < best_any_d) begin
-						best_any_d    <= d[13:0];
-						best_any_data <= am1[13:0] + 14'd48;
+					if(w_d < best_any_d) begin
+						best_any_d    <= w_d;
+						best_any_data <= w_am1 + 14'd48;
 					end
 					// the first matching one after the head is the one transferred
 					if((edsk_fm == drive_fm) &&
 					   (~rw_type || ((edsk_trackf == wdreg_track) && (edsk_sector == wdreg_sector))) &&
-					   (d[13:0] < best_m_d)) begin
-						best_m_d   <= d[13:0];
+					   (w_d < best_m_d)) begin
+						best_m_d   <= w_d;
 						best_m_idx <= g_first + w_i;
-						best_m_pos <= rw_type ? am1[13:0] + 14'd48 : am1[13:0] + 14'd4;
+						best_m_pos <= rw_type ? w_am1 + 14'd48 : w_am1 + 14'd4;
 						best_found <= 1;
 					end
 					w_i   <= w_i + 1'd1;

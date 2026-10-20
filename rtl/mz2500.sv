@@ -97,7 +97,8 @@ module mz2500
 reg  ipl_reset;               // IPL reset from 8255 PC3 (BST) held low
 wire rom_dl    = ioctl_download && ioctl_index == 8'd0;    // boot.rom: holds the machine in reset
 wire tape_dl   = ioctl_download && ioctl_index == 8'd1;    // MZT tape image into SDRAM
-wire sys_reset = reset | rom_dl | ipl_reset;
+reg  clr_busy = 1'b0;          // main RAM clear at core load (see the SDRAM arbiter)
+wire sys_reset = reset | rom_dl | ipl_reset | clr_busy;
 reg  [3:0] cpu_rst_cnt;       // special reset: CPU reset pulse
 wire cpu_reset = sys_reset | (cpu_rst_cnt != 4'd0);
 
@@ -358,6 +359,11 @@ reg [24:0] ram_waddr;
 reg  [7:0] ram_wdata;
 reg        ram_rdone;
 reg  [7:0] ram_q;
+// Main RAM is cleared once per core load, from the start of the boot.rom download (the SDRAM is up by then): the
+// SDRAM keeps whatever the previous core left, while BubiZ and MAME power on with zeroed RAM, and the MZ-80B games
+// disk's STARTUP (mz80b_flop) hangs or draws garbage unless its work area starts out zero.
+reg        clr_done = 1'b0;
+reg [17:0] clr_addr = 18'd0;
 
 always @(posedge clk_sys) begin
 	kanji_ack <= 1'b0;
@@ -378,6 +384,11 @@ always @(posedge clk_sys) begin
 				ram_we <= 1'b1; ram_addr <= ld_addr; ram_din <= ld_data;
 				ld_pend <= 1'b0; ram_cnt <= 2'd3; ram_st <= RAM_WR;
 			end
+			else if (clr_busy) begin
+				ram_we <= 1'b1; ram_addr <= {7'd0, clr_addr}; ram_din <= 8'h00;
+				clr_addr <= clr_addr + 18'd1; if (&clr_addr) begin clr_busy <= 1'b0; clr_done <= 1'b1; end
+				ram_cnt <= 2'd3; ram_st <= RAM_WR;
+			end
 			else if (mem_rd && ram_page && !ram_rdone && !cpu_reset) begin
 				ram_rd <= 1'b1; ram_addr <= cpu_ram_addr; ram_cnt <= 2'd3; ram_st <= RAM_RD;
 			end
@@ -397,6 +408,7 @@ always @(posedge clk_sys) begin
 			if (ram_cnt != 2'd0) ram_cnt <= ram_cnt - 2'd1;
 			else if (ram_ready) begin ram_we <= 1'b0; ram_st <= RAM_IDLE; end
 	endcase
+	if (rom_dl && !clr_done && !clr_busy) clr_busy <= 1'b1;
 	// new writes (after the state machine so they win over the clear above)
 	if (mem_wr_end && !cur_page[5]) begin
 		ram_wpend <= 1'b1; ram_waddr <= cpu_ram_addr; ram_wdata <= cpu_dout;
