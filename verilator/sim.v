@@ -179,6 +179,7 @@ end
 
 always @(posedge clk_sys) if (dbg_dump) begin
    $writememh("out/ram_dump.hex", sdram.mem);
+   $display("[sim] optional ROMs: dictionary %0d phone %0d kanji2 %0d", mz2500.dic_ok, mz2500.phone_ok, mz2500.k2_ok);
    $display("[sim] PAGES %02x %02x %02x %02x %02x %02x %02x %02x  PC %04x", mz2500.page[0], mz2500.page[1], mz2500.page[2],
             mz2500.page[3], mz2500.page[4], mz2500.page[5], mz2500.page[6], mz2500.page[7], cpu_pc);
 end

@@ -431,7 +431,7 @@ bool Sim::load_roms()
     std::vector<uint8_t> d;
     if (!opt.rom_file.empty()) {
         if (!read_file(opt.rom_file, d)) { fprintf(stderr, "cannot read %s\n", opt.rom_file.c_str()); return false; }
-        if (d.size() > 0x50000) d.resize(0x50000);
+        if (d.size() > 0xB8000) d.resize(0xB8000);
         ioctl_load(0, d);
         return true;
     }
@@ -447,6 +447,16 @@ bool Sim::load_roms()
     d.clear();
     if (!read_file(kanji, d)) fprintf(stderr, "warning: no kanji ROM %s: no text font\n", kanji.c_str());
     else { d.resize(0x40000, 0xFF); ioctl_load(0x10000, d); }
+    // optional ROMs (boot.rom layout, docs/roms.md): dictionary, phone, MZ-1R13 kanji; missing ones read FFh
+    static const struct { const char *path; uint32_t at, size; } opt_roms[] = {
+        {"../software/roms/extracted/DICT/DICT.ROM", 0x50000, 0x40000},
+        {"../software/roms/extracted/MZ-1E26/PHONE.ROM", 0x90000, 0x8000},
+        {"../software/roms/extracted/KANJI2/KANJI2.ROM", 0x98000, 0x20000},
+    };
+    for (const auto &r : opt_roms) {
+        d.clear();
+        if (read_file(r.path, d)) { d.resize(r.size, 0xFF); ioctl_load(r.at, d); }
+    }
     return true;
 }
 

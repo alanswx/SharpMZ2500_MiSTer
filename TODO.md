@@ -175,9 +175,12 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 - [x] Raster slot: the text raster requests each kanji ROM byte two cells ahead (tagged request/ack)
 - [x] Main RAM 256 KB and the IPL in SDRAM, IPL loaded through ioctl_wait
 - [x] Kanji 256 KB in SDRAM (080000), CPU window too
-- [ ] Kanji2 128 KB, dictionary 256 KB, phone 16 KB in SDRAM
+- [x] Dictionary 256 KB (page 3A, bank CE), phone 16 KB (pages 3C-3F) and MZ-1R13 kanji 128 KB (B8/B9, word address,
+      IN B9 steps it; CSP mz1r13.cpp, on in CSP's default options) in SDRAM, from the longer boot.rom
+      (`tools/make_bootrom.sh` arguments 5-7, docs/roms.md); a 320 KB boot.rom still works and they read FFh. Sim test
+      `rom_windows` (2026-10-21)
 - [ ] Kanji glyph prefetch per text line into block RAM for the raster (FM-7_MiSTer did the same)
-- [ ] Kanji and dictionary access through pages 39/3A and ports B8-B9, CE-CF; kanji on the text layer
+- [x] Kanji and dictionary access through pages 39/3A and ports B8-B9, CE-CF; kanji on the text layer (Koei titles)
 - [ ] Sim model of the SDRAM in the harness (C++ side) so the sim keeps working
 
 ## Phase 12: OSD and MiSTer integration
@@ -261,7 +264,18 @@ CPU trace from reset matching the reference emulator for the first few thousand 
       no dropouts or capture glitches found
 - [x] WD1793 (ROT=1): the sector register is written during the type I settle (STATE_ROT_SEEK) too, as CSP takes
       it at any time (it was dropped since the rotation model came in); 14-title hardware regression unchanged (20261020b)
-- [ ] Play tests with user disks (Mugen II, Moon Child, Laydock save data) and the remaining disk titles
+- [x] Play tests past the questions (`softlist_userdisk.txt`, 2026-10-21; key sequences found in BubiZ first): Laydock
+      loads its two saved players from the game disk and plays SCENE 01 (BubiZ; on hardware the player B pick needs
+      DOWN later: it chose the same player, "Do not use", as BubiZ does for that input); Nobunaga no Yabou to the
+      daimyo's stat roulette (n = monochrome, n = new game, 1 player); Sangokushi (disks A+B) through scenario,
+      hero, stats and settings to the map and command menu; Moon Child: MAKE CHARACTER formats a blank data disk in
+      drive 2 (`tools/blank_d88.py`, SL MGL with both drives) and saves the character, GAME START plays with it. The
+      data disk written on hardware is byte-identical to BubiZ's (1646 bytes changed). Menus in Moon Child and
+      Mugen II move with the ten-key (2 = down), not the cursor keys
+- [ ] Mugen II: wants a "user disk" in drive 1 after the start question; a blank formatted disk is "not a user disk"
+      in BubiZ too, and the way to make one wasn't found. The OSD Drive 1 browser opens at the mounted image, so a
+      plan can swap disks with F12, ENTER, DOWN..., ENTER
+- [ ] The remaining disk titles past their title screens
 
 ## Later / optional
 

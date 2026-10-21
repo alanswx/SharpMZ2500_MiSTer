@@ -67,7 +67,10 @@ the kanji ROM (checked: under 12% of bytes agree with the 6000h/6010h/6018h sets
 
 ## How the core loads them
 
-Plan (to be finalised with `docs/design.md`):
+One `games/SharpMZ2500/boot.rom`, built by `tools/make_bootrom.sh IPL KANJI OUT [IPL2520 [DICT [PHONE [KANJI2]]]]` (CRCs checked
+against MAME), sent by the menu when the core starts. Everything goes to SDRAM: IPL 040000, phone 050000, MZ-1R13 kanji 060000,
+kanji 080000, dictionary 0C0000. A 320 KB boot.rom (IPL, MZ-2520 IPL, kanji) still works: the optional ROMs then read FFh.
+The table below was the plan; the layout is the one implemented.
 
 | Content | Size | Destination | Needed |
 |---|---|---|---|

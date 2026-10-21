@@ -7,6 +7,9 @@
 #   ipl_200   the same with the 200-line switch, frame 450; identical to MAME's 640x200 screenshot
 #             (refs/compare/mame_ipl_nodisk_f1500.png).
 #
+#   rom_windows  the optional ROMs through the CPU: dictionary page 3A (CE bank), phone pages 3C-3F, MZ-1R13 kanji
+#             ROM at B8/B9 (tests/rom_windows.py: a RAM image run from 0000, RAM dump compared with the ROM files).
+#
 #   ys3_1000  (GAMES=1 only, about 8 minutes) Ys III from its two D88 disks: frame 1000 hash, in the scrolling intro.
 #             Needs the disks in ../software/archive.org/mz-2500/extracted/ (docs/software.md); read-only.
 #
@@ -31,6 +34,8 @@ run() {   # run NAME ARGS...
 
 run ipl_400 --lines 400 --stop-at-frame 400 --screenshot 400 --frame-log "$OUT/ipl_400.csv"
 run ipl_200 --lines 200 --stop-at-frame 450 --screenshot 450 --frame-log "$OUT/ipl_200.csv"
+python3 tests/rom_windows.py image "$OUT/rom_windows.bin"
+run rom_windows --ramimg "$OUT/rom_windows.bin" --stop-at-frame 30 --dump-at-cpu-cycle 1500000
 YS3="../software/archive.org/mz-2500/extracted/MZ2500 同人自作フリーゲームセット (起動確認済)"
 if [ -n "$GAMES" ]; then
     run ys3_1000 --fdd "$YS3/Ys'3 (19xx)(-)(Program).D88" --fdd-b "$YS3/Ys'3 (19xx)(-)(User).D88" --fdd-readonly \
@@ -54,6 +59,7 @@ check() {   # check NAME ACTUAL
 
 check ipl_400 "$(hash_at "$OUT/ipl_400.csv" 400)"
 check ipl_200 "$(hash_at "$OUT/ipl_200.csv" 450)"
+check rom_windows "$(python3 tests/rom_windows.py check out/ram_dump.hex)"
 [ -n "$GAMES" ] && check ys3_1000 "$(hash_at "$OUT/ys3_1000.csv" 1000)"
 
 exit $fail

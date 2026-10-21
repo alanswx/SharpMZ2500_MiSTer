@@ -1,0 +1,183 @@
+# Play tests past the questions that stopped softlist_play.txt (key sequences worked out in BubiZ):
+#   Laydock: saved players on the game disk (YES, pick, B picks the other one), menus, SCENE 01, play
+#   Nobunaga no Yabou: monochrome (n), new game (n)
+#   Sangokushi (disks A+B): new game, scenario, players, hero, stat roulette, settings, map and command menu
+#   Moon Child: MAKE CHARACTER onto a blank data disk in drive 2 (sl/moonchld_data.d88 from tools/blank_d88.py,
+#   SL/moonchld_data.mgl: moonchld_1 + moonchld_data), then GAME START with that character
+cfg lines 400
+cfg model 2500
+cfg keyboard jp
+cfg bootmode 2500
+load SL/laydock
+wait 34
+shot ud_laydock_t
+key SPACE 0.3
+wait 12
+shot ud_laydock_a
+key ENTER 0.35
+wait 7
+shot ud_laydock_a2
+key ENTER 0.35
+wait 8
+shot ud_laydock_b
+key ENTER 0.35
+wait 6
+shot ud_laydock_b2
+key DOWN 0.35
+wait 3
+key ENTER 0.35
+wait 8
+shot ud_laydock_status
+key ENTER 0.35
+wait 8
+shot ud_laydock_menu
+key ENTER 0.35
+wait 5
+shot ud_laydock_players
+key ENTER 0.35
+wait 5
+shot ud_laydock_control
+key ENTER 0.35
+wait 8
+shot ud_laydock_scene
+key ENTER 0.35
+wait 10
+shot ud_laydock_play
+key SPACE 1.0
+key RIGHT 1.0
+key SPACE 1.0
+key LEFT 1.0
+wait 3
+shot ud_laydock_play2
+load SL/nobunaga
+wait 36
+shot ud_nobunaga_t
+key SPACE 0.3
+wait 25
+shot ud_nobunaga_monitor
+key N 0.4
+wait 5
+shot ud_nobunaga_mono
+key ENTER 0.3
+wait 15
+shot ud_nobunaga_newload
+key N 0.4
+wait 5
+shot ud_nobunaga_n
+combo LEFTSHIFT+N
+wait 5
+shot ud_nobunaga_n2
+key ENTER 0.3
+wait 15
+shot ud_nobunaga_next
+key 1 0.15
+wait 2
+key ENTER 0.3
+wait 15
+shot ud_nobunaga_next2
+load SL/sangoku
+wait 37
+shot ud_sangoku_t
+key SPACE 0.3
+wait 15
+shot ud_sangoku_rnd
+key ENTER 0.3
+wait 18
+shot ud_sangoku_new
+key 1 0.15
+wait 2
+key ENTER 0.3
+wait 14
+shot ud_sangoku_scen
+key 1 0.15
+wait 2
+key ENTER 0.3
+wait 14
+shot ud_sangoku_players
+key 1 0.15
+wait 2
+key ENTER 0.3
+wait 14
+shot ud_sangoku_hero
+key 1 0.15
+wait 2
+key ENTER 0.3
+wait 20
+shot ud_sangoku_roul
+key SPACE 0.15
+wait 4
+key SPACE 0.15
+wait 4
+key SPACE 0.15
+wait 4
+key SPACE 0.15
+wait 4
+key SPACE 0.15
+wait 6
+shot ud_sangoku_ok
+key Y 0.15
+wait 2
+key ENTER 0.3
+wait 10
+shot ud_sangoku_str
+key 5 0.15
+wait 2
+key ENTER 0.3
+wait 10
+key 1 0.15
+wait 2
+key ENTER 0.3
+wait 10
+key 2 0.15
+wait 2
+key ENTER 0.3
+wait 15
+shot ud_sangoku_all
+key Y 0.15
+wait 25
+shot ud_sangoku_start
+key ENTER 0.3
+wait 30
+shot ud_sangoku_map
+key ENTER 0.3
+wait 10
+shot ud_sangoku_cmd
+load SL/moonchld_data
+wait 60
+shot ud_moonchld_t
+key SPACE 0.3
+wait 8
+shot ud_moonchld_menu
+key 2 0.3
+wait 2
+key SPACE 0.3
+wait 8
+shot ud_moonchld_char
+key SPACE 0.3
+wait 20
+shot ud_moonchld_name
+type MZ
+wait 1
+key ENTER 0.2
+wait 4
+shot ud_moonchld_sure
+key Y 0.15
+wait 40
+shot ud_moonchld_made
+key SPACE 0.3
+wait 8
+shot ud_moonchld_menu2
+key SPACE 0.3
+wait 6
+shot ud_moonchld_1p
+key SPACE 0.3
+wait 8
+shot ud_moonchld_insert
+key SPACE 0.3
+wait 25
+shot ud_moonchld_game
+key RIGHT 1.0
+key LEFT 1.0
+key SPACE 0.3
+wait 5
+shot ud_moonchld_game2

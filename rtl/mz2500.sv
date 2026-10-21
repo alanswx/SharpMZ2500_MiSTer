@@ -312,22 +312,39 @@ end
 
 wire ld_ipl   = rom_dl && ioctl_addr[24:16] == 9'd0;        // MZ-2500 IPL 000000-007FFF, MZ-2520 IPL 008000-00FFFF
 wire ld_kanji = rom_dl && ioctl_addr[24:16] >= 9'd1 && ioctl_addr[24:16] <= 9'd4;
+wire ld_dic   = rom_dl && ioctl_addr[24:16] >= 9'd5 && ioctl_addr[24:16] <= 9'd8;   // 050000-08FFFF
+wire ld_phone = rom_dl && ioctl_addr[24:15] == 10'h012;                             // 090000-097FFF
+wire ld_k2    = rom_dl && ioctl_addr[24:15] >= 10'h013 && ioctl_addr[24:15] <= 10'h016;   // 098000-0B7FFF
 wire ld_tape  = tape_dl && ioctl_addr[24:20] == 5'd0;      // up to 1 MB at SDRAM 100000
 wire ld_snap  = snap_dl && ioctl_addr[24:16] == 9'd0;       // 64 KB at main RAM 000000 (pages 00-07)
 
 // SDRAM holds main RAM 256 KB (pages 00-1F) at 000000-03FFFF, the IPL ROM (pages 34-37) at 040000-047FFF (MZ-2520:
-// 048000-04FFFF) and the
-// kanji ROM at 080000-0BFFFF (CPU window: page 39 with CF bit 7; text raster glyph fetches). The controller
+// 048000-04FFFF), the phone ROM (pages 3C-3F) at 050000-057FFF, the MZ-1R13 kanji ROM (ports B8/B9) at 060000-07FFFF,
+// the kanji ROM at 080000-0BFFFF (CPU window: page 39 with CF bit 7; text raster glyph fetches) and the dictionary ROM
+// (page 3A, 8 KB bank from CE) at 0C0000-0FFFFF. The optional ROMs read FFh until boot.rom has brought them (an older
+// 320 KB boot.rom has only the IPL and kanji), as CSP's memset(0xff) when a file is missing. The controller
 // (rtl/sdram.sv) takes a request on a rising edge of rd or we and drops 'ready' until it is done. Clients, in
 // priority order: the text raster (a glyph byte per text cell, requested two cells ahead of display), posted CPU
 // writes and ROM-download writes, CPU reads (issued at the start of the memory cycle; the CPU waits only if the data
 // isn't back by T2, at 6 MHz it normally is: T1 to T2 is 14 clk_sys).
+reg         dic_ok = 1'b0, phone_ok = 1'b0, k2_ok = 1'b0;   // the optional ROM came with boot.rom
 wire        kwin         = cur_page == 6'h39 && kanji_bank[7] && cur_off[12:11] == 2'd0;
-wire        ram_page     = !cur_page[5] || cur_page[5:2] == 4'b1101 || kwin;
+wire        dwin         = cur_page == 6'h3A && dic_ok;
+wire        pwin         = cur_page[5:2] == 4'b1111 && phone_ok;
+wire        ram_page     = !cur_page[5] || cur_page[5:2] == 4'b1101 || kwin || dwin || pwin;
 wire [24:0] cpu_ram_addr = kwin        ? {5'd0, 2'b10, kanji_bank[6:0], cur_off[10:0]} :
+                           dwin        ? {5'd0, 2'b11, dic_bank, cur_off} :
+                           pwin        ? {6'd0, 3'b101, 1'b0, cur_page[1:0], cur_off} :
                            cur_page[5] ? {6'd0, 1'b1, 2'b00, m2520, cur_page[1:0], cur_off} : {7'd0, cur_page[4:0], cur_off};
 
-wire [17:0] kanji_ld_addr = ioctl_addr[17:0] - 18'h10000;
+// MZ-1R13 kanji ROM (CSP mz1r13.cpp, mapped at B8-B9 only, so the kanji ROM is always selected): B8/B9 write the low/high
+// byte of a word address, IN B8/B9 read byte 0/1 of that word, and IN B9 steps the address. The read goes through the
+// CPU's SDRAM read path with WAIT, as a memory read does.
+reg  [15:0] k2_addr;
+wire        k2_rd  = io_rd && port[7:1] == 7'b1011100 && k2_ok;
+
+wire [17:0] kanji_ld_addr = ioctl_addr[17:0] - 18'h10000;   // also the dictionary's offset (050000 -> 0)
+wire [16:0] k2_ld_addr    = ioctl_addr[16:0] - 17'h18000;
 
 // Data recorder (rtl/mz2500_cmt.sv): the tape image is downloaded to SDRAM 100000 (ioctl index 1); the player
 // reads it a byte at a time through the SDRAM arbiter (lowest priority).
@@ -394,8 +411,9 @@ always @(posedge clk_sys) begin
 				clr_addr <= clr_addr + 18'd1; if (&clr_addr) begin clr_busy <= 1'b0; clr_done <= 1'b1; end
 				ram_cnt <= 2'd3; ram_st <= RAM_WR;
 			end
-			else if (mem_rd && ram_page && !ram_rdone && !cpu_reset) begin
-				ram_rd <= 1'b1; ram_addr <= cpu_ram_addr; ram_cnt <= 2'd3; ram_st <= RAM_RD;
+			else if ((mem_rd && ram_page || k2_rd) && !ram_rdone && !cpu_reset) begin
+				ram_rd <= 1'b1; ram_addr <= k2_rd ? {6'd0, 2'b11, k2_addr, port[0]} : cpu_ram_addr;
+				ram_cnt <= 2'd3; ram_st <= RAM_RD;
 			end
 			else if (cmt_rd_req && !cmt_rd_busy) begin
 				ram_rd <= 1'b1; ram_addr <= {4'd0, 1'b1, cmt_rd_addr}; ram_cnt <= 2'd3; ram_st <= RAM_TR; cmt_rd_busy <= 1'b1;
@@ -430,6 +448,15 @@ always @(posedge clk_sys) begin
 	if (ld_snap && ioctl_wr) begin
 		ld_pend <= 1'b1; ld_addr <= {9'd0, ioctl_addr[15:0]}; ld_data <= ioctl_dout;
 	end
+	if (ld_dic && ioctl_wr) begin
+		ld_pend <= 1'b1; ld_addr <= {5'd0, 2'b11, kanji_ld_addr}; ld_data <= ioctl_dout; dic_ok <= 1'b1;
+	end
+	if (ld_phone && ioctl_wr) begin
+		ld_pend <= 1'b1; ld_addr <= {6'd0, 3'b101, 1'b0, ioctl_addr[14:0]}; ld_data <= ioctl_dout; phone_ok <= 1'b1;
+	end
+	if (ld_k2 && ioctl_wr) begin
+		ld_pend <= 1'b1; ld_addr <= {6'd0, 2'b11, k2_ld_addr}; ld_data <= ioctl_dout; k2_ok <= 1'b1;
+	end
 	// Reset clears only the CPU side. MiSTer Main holds the core in reset (status bit 0) while it sends boot.rom, so
 	// download writes must go on, and an access in progress is left to finish (the controller always answers).
 	if (reset) begin
@@ -454,7 +481,7 @@ assign dbg = {dbg_pc, dbg_op, ppi_pa, cmt_dbg, 1'b0, ram_st, sys_reset, cpu_rese
 // high in T2, and DI is registered once (cpu_din_r).
 reg    ram_rdone_d;
 always @(posedge clk_sys) ram_rdone_d <= ram_rdone;
-wire   ram_wait    = (mem_rd && ram_page && !(ram_rdone && ram_rdone_d)) || (mem_wr && !cur_page[5] && ram_wpend);
+wire   ram_wait    = ((mem_rd && ram_page || k2_rd) && !(ram_rdone && ram_rdone_d)) || (mem_wr && !cur_page[5] && ram_wpend);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Video
@@ -706,7 +733,7 @@ always @(posedge clk_sys) begin
 		page[0] <= 6'h34; page[1] <= 6'h35; page[2] <= 6'h36; page[3] <= 6'h37;
 		page[4] <= 6'h04; page[5] <= 6'h05; page[6] <= 6'h06; page[7] <= 6'h07;
 		bank <= 3'd0; mmu_mode <= 2'd0;
-		kanji_bank <= 8'd0; dic_bank <= 5'd0;
+		kanji_bank <= 8'd0; dic_bank <= 5'd0; k2_addr <= 16'd0;
 		pio_pa <= 8'h00; pio_ctl_a <= 8'd0; pio_ctl_b <= 8'd0;
 	end
 	else begin
@@ -717,6 +744,7 @@ always @(posedge clk_sys) begin
 			bank <= 3'd0;
 		end
 		if (io_rd_end && port == 8'hB5) bank <= bank + 3'd1;
+		if (io_rd_end && port == 8'hB9) k2_addr <= k2_addr + 16'd1;
 		if (io_wr_end) begin
 			case (port)
 				8'hB4: bank <= cpu_dout[2:0];
@@ -728,6 +756,8 @@ always @(posedge clk_sys) begin
 					end
 					mmu_mode <= cpu_dout[1:0];
 				end
+				8'hB8: k2_addr[7:0] <= cpu_dout;
+				8'hB9: k2_addr[15:8] <= cpu_dout;
 				8'hCE: dic_bank <= cpu_dout[4:0];
 				8'hCF: kanji_bank <= cpu_dout;
 				8'hE8: pio_pa <= cpu_dout;
@@ -918,6 +948,7 @@ always @(*) begin
 		6'b0?????, 6'b1101??: mem_dout = ram_q;
 		6'b10????, 6'b1100??, 6'h38: mem_dout = vid_mem_dout;
 		6'h39: mem_dout = kwin ? ram_q : vid_mem_dout;
+		6'h3A, 6'b1111??: mem_dout = (dwin || pwin) ? ram_q : 8'hFF;
 		default: mem_dout = 8'hFF;
 	endcase
 	if (snap_rd) mem_dout = snap_q;
@@ -941,6 +972,7 @@ always @(*) begin
 		8'hEF: io_dout = joy_rd;
 		8'hCC: io_dout = {4'h0, rtc_dout};                       // RP5C15, register on A11-A8
 		8'hCA: io_dout = 8'h30;                                  // MZ-1E26 phone unit idle (FFh = 'powered from the phone')
+		8'hB8, 8'hB9: io_dout = k2_ok ? ram_q : 8'hFF;            // MZ-1R13 kanji ROM
 		default: io_dout = 8'hFF;
 	endcase
 end
