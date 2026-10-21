@@ -1,0 +1,6 @@
+# Optional ROMs through the CPU (verilator/tests/rom_windows.py program plus a hex dump to the screen): needs the 736 KB
+# boot.rom and SL/zz_romtest.mgl (ram/zz_romtest.bin). The screen shows dictionary bank 5 (16 bytes), phone 100h
+# (16), MZ-1R13 kanji 2468h (4), then 8 x FF: compare with the ROM files (rom_windows.py) or the sim's picture.
+load SL/zz_romtest
+wait 12
+shot romwin

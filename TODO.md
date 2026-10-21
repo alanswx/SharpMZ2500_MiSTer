@@ -178,7 +178,7 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 - [x] Dictionary 256 KB (page 3A, bank CE), phone 16 KB (pages 3C-3F) and MZ-1R13 kanji 128 KB (B8/B9, word address,
       IN B9 steps it; CSP mz1r13.cpp, on in CSP's default options) in SDRAM, from the longer boot.rom
       (`tools/make_bootrom.sh` arguments 5-7, docs/roms.md); a 320 KB boot.rom still works and they read FFh. Sim test
-      `rom_windows` (2026-10-21)
+      `rom_windows` (2026-10-21; on hardware with 20261021b: `tools/mister_tests/rom_windows.txt` shows the same bytes on screen, and the 14-title regression is unchanged)
 - [ ] Kanji glyph prefetch per text line into block RAM for the raster (FM-7_MiSTer did the same)
 - [x] Kanji and dictionary access through pages 39/3A and ports B8-B9, CE-CF; kanji on the text layer (Koei titles)
 - [ ] Sim model of the SDRAM in the harness (C++ side) so the sim keeps working

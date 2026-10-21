@@ -4,13 +4,14 @@ Builds in `releases/` are tester builds: copy one to `/media/fat/_Computer/` on 
 [README](README.md#getting-started-on-a-mister)). Newest first. Builds not listed here were intermediate and are not
 in the repository.
 
-## 20261021 (next build)
+## 20261021b
 
 - Dictionary ROM (page 3A, bank port CE), phone ROM (pages 3C-3F) and the MZ-1R13 kanji ROM (ports B8/B9), loaded from
   a longer `boot.rom` (736 KB: `tools/make_bootrom.sh` takes them as arguments 5-7). A 320 KB `boot.rom` keeps working;
   the optional ROMs then read FFh, as in the emulators when the file is missing.
 - `tools/blank_d88.py` makes blank formatted 2DD disks for games that want a user or data disk (Moon Child's
   MAKE CHARACTER formats and fills one; checked byte for byte against the emulator).
+- Built with fitter seed 2: the default placement missed timing by 0.09 ns in the MiSTer framework's HDMI scaler.
 
 ## 20261020b
 
