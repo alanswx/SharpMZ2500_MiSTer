@@ -9,78 +9,93 @@ shares the T80, 8255, 8253, Z80 PIO, floppy and tape RTL.
 
 ## Getting started on a MiSTer
 
-1. Copy `SharpMZ2500_<date>.rbf` to `/media/fat/_Computer/`.
-2. Make `boot.rom` from your own ROM dumps (they are Sharp's copyright and not included). From the MAME `mz2500`
-   set you need `ipl.rom` (32 KB, CRC 7a659f20) and `kanji.rom` (256 KB, CRC dd426767); for the MZ-2520 model also
-   `ipl2520.rom` (mz2520 set, CRC 0a126eb2). Then either `tools/make_bootrom.sh ipl.rom kanji.rom boot.rom
-   [ipl2520.rom]`, or by hand (the second 32 KB is the MZ-2520 IPL slot; any filler works without it):
-   - Windows: `copy /b ipl.rom + ipl.rom + kanji.rom boot.rom` (or `ipl.rom + ipl2520.rom + kanji.rom`)
-   - Mac/Linux: `cat ipl.rom ipl.rom kanji.rom > boot.rom`
+1. **Core**: copy the newest `releases/SharpMZ2500_<date>.rbf` to `/media/fat/_Computer/` (what changed:
+   [RELEASES.md](RELEASES.md)).
+2. **ROMs**: the core needs your own dumps in one file, `/media/fat/games/SharpMZ2500/boot.rom` (Sharp's copyright;
+   not included). It is loaded when the core starts. Names and CRCs are those of MAME's `mz2500` set:
 
-   The result is 327,680 bytes. Put it in `/media/fat/games/SharpMZ2500/boot.rom`; the core loads it at start-up.
-3. Disks: `.d88` images in Drive 1-4 from the OSD, then reset. The IPL boots drive 1.
-4. Tapes (MZ-2000 / MZ-80B software): set Boot mode to MZ-2000 or MZ-80B, Load tape (`.mzt`), reset and press C
-   at the IPL menu. Loading runs at real tape speed (BASIC takes a few minutes).
-   RAM images (MAME `mz2000_snap` `.bin`, MZ-2000 memory from 0000): Load RAM image starts them at once, in MZ-2000
-   mode whatever the Boot mode; a reset goes back to the IPL.
-5. OSD options: Lines (400 = 24 kHz monitor, 200 = 15 kHz), Boot mode (MZ-2500 / MZ-2000 / MZ-80B, applies at reset),
-   Keyboard (Japanese positional layout or US symbols), Model (MZ-2500 / MZ-2520, applies at reset).
-6. Keys: F11 = HELP, Print Screen = COPY (F12 opens the MiSTer menu), End or Pause = BREAK, Home = CLR/HOME,
-   Insert/Delete = INST/DEL, Alt = GRAPH, Caps Lock = LOCK. The mouse and joystick 1 work (Dust Box menus, games).
-7. MGL launchers: `tools/make_mgls.py` writes one per disk, tape and RAM image (`_Computer/_SharpMZ2500/`).
+   | File | Size | CRC32 | Needed for |
+   |---|---|---|---|
+   | `ipl.rom` | 32 KB | 7a659f20 | everything |
+   | `kanji.rom` | 256 KB | dd426767 | everything (all text fonts are in it) |
+   | `ipl2520.rom` (mz2520 set) | 32 KB | 0a126eb2 | the MZ-2520 model only |
+   | `dict.rom` | 256 KB | aa957c2b | optional: dictionary (Japanese input) |
+   | `phone.rom` | 16 KB | 8e49e4dc | optional: MZ-1E26 phone unit |
+   | `kanji2.rom` | 128 KB | eaaf20c9 | optional: MZ-1R13 kanji board |
 
-## Status: Ys III boots from floppy and plays its intro (simulation)
+   Build it with `tools/make_bootrom.sh ipl.rom kanji.rom boot.rom [ipl2520.rom [dict.rom [phone.rom [kanji2.rom]]]]`
+   (checks the CRCs; leave out or pass `''` for ones you don't have). The short version (IPL and kanji only, 320 KB)
+   can be made by hand: `cat ipl.rom ipl.rom kanji.rom > boot.rom` (Windows: `copy /b ipl.rom + ipl.rom + kanji.rom
+   boot.rom`; the second 32 KB is the MZ-2520 IPL slot). Missing optional ROMs read FFh, as in the emulators.
+3. **Disks** (`.d88`): Drive 1 and Drive 2 in the OSD, then reset (OSD Reset). The IPL boots drive 1. Writes go back
+   to the image. Games that ask for a user or data disk (Ys III, Moon Child, ...) want one in the other drive: make a
+   blank formatted one with `tools/blank_d88.py user.d88`. MAME's `.dsk` and `.mfi` images: convert with
+   `tools/dsk2d88.py` / `tools/mfm2d88.py`.
+4. **Tapes** (`.mzt`, MZ-2000 / MZ-80B software): set Boot mode to MZ-2000 or MZ-80B, Load tape, reset, press C at
+   the IPL menu. Tapes play at real speed (BASIC takes a few minutes). WAV recordings: `tools/wav2mzt.py`.
+5. **RAM images** (MAME `mz2000_snap` `.bin`): Load RAM image starts them at once in MZ-2000 mode, whatever the Boot
+   mode; a reset goes back to the IPL.
+6. **Launchers**: `tools/make_mgls.py OUTDIR GAMESDIR` writes an MGL per disk (both drives for `X_Program.d88` +
+   `X_User.d88` pairs), tape and RAM image, for `_Computer/_SharpMZ2500/`.
 
-In the Verilator simulation, with the real IPL and kanji ROMs:
+### OSD
 
-- Power on with no media: the IPL's "loading error / Press F or C" screen, identical pixel for pixel to BubiZ-2500's
-  (CSP core) at 400 lines and to MAME's at 200 lines (`make test`).
-- **Ys III (Falcom, 1989)** from its two D88 disks: the IPL boots it, it loads, shows the Falcom copyright screen,
-  fades it out through the 4096-colour palette and plays the scrolling intro with its YM2203 music; at frame 3000
-  it is on the same intro page as BubiZ-2500 (`GAMES=1 make test` checks frame 1000).
+| Item | |
+|---|---|
+| Drive 1, Drive 2 | D88 images |
+| Load tape / Load RAM image | MZT tape for the data recorder / mz2000_snap image, run at once |
+| Lines | 400 (24 kHz monitor, the default) or 200 (15 kHz): the machine's front switch; software reads it |
+| Boot mode | MZ-2500, MZ-2000 or MZ-80B: the mode switch, read at reset |
+| Keyboard | Japanese (positional: a Japanese MZ keyboard on PC keys, as in the emulators) or US (the symbols printed on a US keyboard) |
+| Model | MZ-2500 or MZ-2520 (its IPL boots only from floppy), at reset |
+| Scandoubler Fx, Aspect ratio | the usual MiSTer options |
 
-- **Hoshikuzu-bako / Dust Box** disk magazine (1990-92): the IPL boots BASIC-M25 from the disk, which runs the
-  issue's program; the 256-colour title screens of issues 1-7 and Special 1 match BubiZ-2500 pixel for pixel at
-  frame 6000 (vol. 2 differs only in an animated raindrop caught at another moment).
+### Keys
 
-Tested on a MiSTer (DE10-Nano with SDRAM, 2026-10-08): the IPL menu in 400 and 200 lines, Ys III's intro, the
-256-colour titles of Dust Box 1-16 and Special 1 and their menus from the keyboard, MZ-1Z001 / MZ-1Z002 BASIC in
-MZ-2000 mode and SB-5520 in MZ-80B mode from tape, and Puckn Boy loaded from MZ-1Z002's monitor and played. The
-build uses 46% of the logic and 297/553 block RAMs at 85.9 MHz.
+F11 = HELP, Print Screen = COPY (F12 is the MiSTer menu), End or Pause = BREAK, Home = CLR/HOME, Insert/Delete =
+INST/DEL, Alt = GRAPH, Caps Lock = LOCK, the keypad = the ten-key (many games move menus with ten-key 2/4/6/8, not
+the cursor keys). The mouse (PS/2 through the Z80 SIO) and joystick 1 (two triggers) work.
 
-Hardware tests: `tools/mister_test.py` runs on the MiSTer (a virtual keyboard on /dev/uinput, MGL loading and
-screenshots through /dev/MiSTer_cmd, OSD options through config/SharpMZ2500.CFG); `tools/mister_run.sh HOST
-tools/mister_tests/*.txt` runs the plans and fetches the screenshots; `tools/make_mgls.py` writes MGL launchers.
-The core prints a machine snapshot every 0.1 s on its UART (`cat /dev/ttyS1` at 115200 on the MiSTer).
+## Compatibility
 
-Keyboard: OSD "Keyboard" chooses Japanese (positional, the default: a Japanese MZ keyboard on PC keys, as in CSP) or
-US (the symbols printed on a US keyboard; checked on hardware with every symbol in MZ-2000 BASIC). Also checked on
-hardware: the mouse (Dust Box menus), joystick 1 (directions and both triggers, read through the debug snapshot),
-and sound (the Ys III music level in the debug snapshot).
+Tested on a MiSTer (DE10-Nano with SDRAM) against BubiZ-2500 (Takeda's EmuZ-2500 core) on the MAME software lists
+(details: [TODO.md](TODO.md), [software/README.md](software/README.md)):
 
-What exists (`rtl/`): Z80 (T80 v350) with CSP's wait states; the MMU and its reset maps; 256 KB main RAM and the IPL
-and the kanji ROM in SDRAM (the text raster fetches glyphs two cells ahead), ROMs from `boot.rom`; text CRTC and graphics controller with text VRAM, PCG and
-graphics VRAM (16- and 256-colour modes, RMW window, clear, scroll, palette and priority, the 4096-colour board,
-64-colour text); the interrupt block, 8253, 8255, Z80 PIO and keyboard; the MB8876 floppy controller with two D88
-drives (wd1793.sv); the YM2203 (jotego jt03) and the beeper; the RP5C15 clock (from MiSTer's RTC); the joystick
-port; a minimal Z80 SIO with the mouse on channel B; the data recorder (MZT images from the OSD, held in SDRAM, with
-the MZ-2500 and the MZ-80B/2000 tape formats and APSS); the MZ-2000 / MZ-80B compatibility mode (boot mode in the
-OSD, 4 MHz CPU, the VRAM windows of PIO port A, the 2000/80B text and graphics display). Not yet: tape recording,
-RS-232C, drives 3-4: see [TODO.md](TODO.md).
+- **MZ-2500 disks**: all 62 MAME 0.228 + 0.289 `mz2500_flop` titles that boot in the emulator boot and match it,
+  including the copy-protected Laydock, Macadam, Märchen Veil and Mugen II. Play-tested into the game: Arion, Back to
+  the Future, Balloon Fight, Druaga, Excite Bike, Galaga, Hover Attack, King Flappy, Laydock, Mappy, Märchen Veil,
+  Moon Child, Nobo, Penguin-kun Wars, Re-Birth, Relics, Sangokushi, Nobunaga no Yabou, Triton, Xevious, Ys III (with
+  saving) and more; the Hoshikuzu-bako / Dust Box disk magazine (all issues).
+- **MZ-2000 / MZ-2200 tapes**: all MAME `mz2000_cass` / `mz2200_cass` tapes load, except Jelda and Jelda 2 (bad dumps).
+  `mz2000_snap`: all 14 images run. `mz2000_flop`: the C-DOS disks boot.
+- **MZ-80B**: SB-5510/5520 BASIC, Disk BASIC SB-6510/6610/6511 and Vosque from tape, the games disk.
+- Same as in the emulators: F-2 Grand Prix (bad dump: Disk Error), SP-5025 BASIC (never finishes loading), Brave
+  (blank after RETURN).
 
-MZ-2000 mode: set Boot mode to MZ-2000, load an MZT (e.g. MZ-1Z001 BASIC), reset and press C at the IPL menu. In the
-sim (`--boot-mode 2000 --tape MZ-1Z001.mzt --type 600:c`) BASIC comes up "Ready" by frame 13500, pixel-identical to
-BubiZ-2500 `-mz2000`; in MZ-80B mode SB-5520 BASIC likewise (`--boot-mode 80b`).
+Not supported yet: tape recording (SAVE to tape), drives 3-4 in the standard build (a build option), RS-232C, the
+printer, the SASI hard disk and memory expansions; Mugen II's user disk hasn't been made to work (no way found to
+create one, also in the emulator). See [TODO.md](TODO.md).
 
-ROMs: build `boot.rom` from your dumps with `tools/make_bootrom.sh IPL.ROM KANJI.ROM boot.rom [IPL2520.ROM]` (CRCs in
-docs/roms.md) and put it in `games/SharpMZ2500/` on the SD card; the sim reads `software/roms/extracted/` by default
-or `--rom boot.rom`.
+## Development status
+
+Everything runs in a Verilator simulation of the same RTL as well (`verilator/`, `make test`): the IPL screen is
+identical pixel for pixel to BubiZ-2500's (400 lines) and MAME's (200 lines), Ys III boots to its intro, the optional
+ROMs read back through the CPU. Hardware tests: `tools/mister_test.py` runs on the MiSTer (a virtual keyboard on
+/dev/uinput, MGL loading and screenshots through /dev/MiSTer_cmd, OSD options through config/SharpMZ2500.CFG);
+`tools/mister_run.sh HOST tools/mister_tests/*.txt` runs the plans and fetches the screenshots. The core prints a
+machine snapshot every 0.1 s on its UART (`cat /dev/ttyS1` at 115200 on the MiSTer).
+
+What exists (`rtl/`): Z80 (T80 v350) with CSP's wait states; the MMU and its reset maps; 256 KB main RAM and the
+ROMs in SDRAM (the text raster fetches kanji glyphs two cells ahead); text CRTC and graphics controller (16- and
+256-colour modes, RMW window, clear, scroll, palette and priority, the 4096-colour board, 64-colour text); the
+interrupt block, 8253, 8255, Z80 PIO and keyboard; the MB8876 floppy controller with D88 drives and CSP's rotation
+timing (wd1793.sv); the YM2203 (jotego jt03) and the beeper; the RP5C15 clock (from MiSTer's RTC); joysticks; a
+minimal Z80 SIO with the mouse; the data recorder (MZT, MZ-2500 and MZ-80B/2000 formats, APSS); the MZ-2000 / MZ-80B
+compatibility mode; the RAM-image loader.
 
 Research: hardware reference, ROM list, software sources and reference emulators in `docs/`. The reference
-emulator is BubiZ-2500 (Takeda's EmuZ-2500 core with a headless mode), with MAME as a second opinion; both run
-headless on macOS (docs/emulators.md).
-
-Next: try it on a MiSTer, more titles from the MAME list, 256-colour modes, RTC.
+emulator is BubiZ-2500 (headless mode), with MAME as a second opinion; both run headless on macOS
+(docs/emulators.md).
 
 ## Layout
 
@@ -101,7 +116,8 @@ Next: try it on a MiSTer, more titles from the MAME list, 256-colour modes, RTC.
 | `verilator/` | Headless simulation, regression tests ([README](verilator/README.md)) |
 | `docs/` | [hardware](docs/hardware.md), [design](docs/design.md), [references](docs/references.md), [emulators](docs/emulators.md), [ROMs](docs/roms.md), [software](docs/software.md), [FPGA blocks](docs/fpga_blocks.md) |
 | `tools/fetch_refs.sh` | Fetches the reference emulators and documents into `refs/`; `--roms DIR` copies and CRC-checks local ROMs |
-| `tools/make_bootrom.sh` | Builds `boot.rom` (IPL + kanji) from ROM dumps, CRC-checked |
+| `tools/make_bootrom.sh` | Builds `boot.rom` from ROM dumps, CRC-checked |
+| `tools/blank_d88.py`, `dsk2d88.py`, `mfm2d88.py`, `wav2mzt.py`, `make_mgls.py` | Blank user disks, image converters, MGL launchers |
 | `tools/mame_snap.lua` | MAME autoboot script: snapshot and RAM/VRAM dumps at frame N, for headless comparison |
 | `refs/`, `software/` | Local only (gitignored): emulator sources, documents, ROMs, disk images. Their READMEs list every item and where it came from. |
 
