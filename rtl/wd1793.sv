@@ -1468,7 +1468,10 @@ always @(posedge clk_sys) begin
 					// register write in that interval; only data-transfer
 					// commands must reject a write that would change the
 					// address of an operation already in progress.
-					if (!s_busy || (state == STATE_WAIT) || (state == STATE_WAIT_2))
+					// (ROT=1: the type I settle time is STATE_ROT_STEPT/STATE_ROT_SEEK; CSP's MB8877 takes the
+					// write at any time)
+					if (!s_busy || (state == STATE_WAIT) || (state == STATE_WAIT_2) ||
+					    (state == STATE_ROT_STEPT) || (state == STATE_ROT_SEEK))
 						{ra_sector, wdreg_sector} <= {din,din};
 `ifdef DEBUG_FDC_SCAN
 					else $display("WDDROP SECTOR <- $%02x while BUSY (kept $%02x)", din, wdreg_sector);

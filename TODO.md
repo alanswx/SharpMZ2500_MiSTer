@@ -252,7 +252,16 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 - [ ] SP-5025 BASIC (never finishes loading, MAME hangs too); SB-6511 "Error 40" at start in BubiZ, "Error 50" on the
       core with no disk (MAME: Error 50)
 - [ ] Titles added to MAME after 0.228 (Galaga, Balloon Fight, Re-Birth, ...): no source found on archive.org
-- [ ] Deeper play tests: titles stop at "hit a key" / drive-select prompts; scripted key presses past them
+- [x] Play tests past the title prompts (`softlist_play.txt`, 2026-10-20, 29 disks): into the game or program on
+      Arion, Back to the Future, Balloon Fight, Druaga, Excite Bike, Galaga, Gomoku, Hover Attack, King Flappy, Mappy,
+      Marchen Veil, Nobo, Pro Mahjong, Re-Birth, Relics, Xevious, Hashire Skyline, Murder Club, Triton, Mugen no
+      Shinzou and Penguin-kun Wars (name entry); Laydock, Nobunaga, Mugen II, Moon Child stop at questions (saved data,
+      colour monitor, user disk); Brave goes blank after RETURN in BubiZ too; Macadam needs a longer RETURN (it polls
+      late). Xevious sound on hardware (KVM capture) against BubiZ: same tune, drone pitch (1046/1045 Hz) and timing;
+      no dropouts or capture glitches found
+- [x] WD1793 (ROT=1): the sector register is written during the type I settle (STATE_ROT_SEEK) too, as CSP takes
+      it at any time (it was dropped since the rotation model came in); 14-title hardware regression unchanged (20261020b)
+- [ ] Play tests with user disks (Mugen II, Moon Child, Laydock save data) and the remaining disk titles
 
 ## Later / optional
 

@@ -1,0 +1,631 @@
+# Play tests: MAME softlist disks past their title prompts (start keys from the 20261019 full run's screens),
+# then cursor / ten-key / SPACE input. Shots: _s after the start keys, _p after the input, _p2 12 s later.
+cfg lines 400
+cfg model 2500
+cfg keyboard jp
+cfg bootmode 2500
+load SL/arion
+wait 30
+shot play_arion_t
+key SPACE 0.3
+wait 3
+key ENTER 0.3
+wait 3
+wait 1
+shot play_arion_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_arion_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_arion_p2
+load SL/backtof
+wait 30
+shot play_backtof_t
+key SPACE 0.3
+wait 3
+key ENTER 0.3
+wait 3
+wait 1
+shot play_backtof_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_backtof_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_backtof_p2
+load SL/balonfgt
+wait 25
+shot play_balonfgt_t
+key A 0.3
+wait 3
+wait 1
+shot play_balonfgt_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_balonfgt_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_balonfgt_p2
+load SL/brave
+wait 30
+shot play_brave_t
+key ENTER 0.3
+wait 3
+key ENTER 0.3
+wait 3
+wait 1
+shot play_brave_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_brave_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_brave_p2
+load SL/druaga
+wait 100
+shot play_druaga_t
+key A 0.3
+wait 3
+key SPACE 0.3
+wait 3
+wait 1
+shot play_druaga_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_druaga_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_druaga_p2
+load SL/excitbik
+wait 25
+shot play_excitbik_t
+key A 0.3
+wait 3
+key SPACE 0.3
+wait 3
+wait 1
+shot play_excitbik_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_excitbik_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_excitbik_p2
+load SL/galaga
+wait 30
+shot play_galaga_t
+key SPACE 0.3
+wait 3
+wait 1
+shot play_galaga_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_galaga_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_galaga_p2
+load SL/gomokuna
+wait 30
+shot play_gomokuna_t
+key SPACE 0.3
+wait 3
+wait 1
+shot play_gomokuna_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_gomokuna_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_gomokuna_p2
+load SL/hoveratk
+wait 30
+shot play_hoveratk_t
+key SPACE 0.3
+wait 3
+wait 1
+shot play_hoveratk_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_hoveratk_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_hoveratk_p2
+load SL/kingflap
+wait 30
+shot play_kingflap_t
+key SPACE 0.3
+wait 3
+wait 1
+shot play_kingflap_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_kingflap_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_kingflap_p2
+load SL/laydock
+wait 30
+shot play_laydock_t
+key SPACE 0.3
+wait 3
+key ENTER 0.3
+wait 3
+wait 1
+shot play_laydock_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_laydock_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_laydock_p2
+load SL/macadam
+wait 30
+shot play_macadam_t
+key ENTER 0.3
+wait 3
+wait 1
+shot play_macadam_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_macadam_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_macadam_p2
+load SL/mappy
+wait 30
+shot play_mappy_t
+key SPACE 0.3
+wait 3
+wait 1
+shot play_mappy_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_mappy_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_mappy_p2
+load SL/marchen
+wait 30
+shot play_marchen_t
+key F5 0.3
+wait 3
+wait 1
+shot play_marchen_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_marchen_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_marchen_p2
+load SL/moonchld
+wait 60
+shot play_moonchld_t
+key SPACE 0.3
+wait 3
+key SPACE 0.3
+wait 3
+wait 1
+shot play_moonchld_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_moonchld_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_moonchld_p2
+load SL/mugen
+wait 30
+shot play_mugen_t
+key F1 0.3
+wait 3
+wait 1
+shot play_mugen_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_mugen_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_mugen_p2
+load SL/mugen2
+wait 30
+shot play_mugen2_t
+key SPACE 0.3
+wait 3
+wait 1
+shot play_mugen2_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_mugen2_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_mugen2_p2
+load SL/nobo
+wait 30
+shot play_nobo_t
+key SPACE 0.3
+wait 3
+wait 1
+shot play_nobo_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_nobo_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_nobo_p2
+load SL/nobunaga
+wait 30
+shot play_nobunaga_t
+key SPACE 0.3
+wait 3
+wait 1
+shot play_nobunaga_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_nobunaga_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_nobunaga_p2
+load SL/penguinw
+wait 30
+shot play_penguinw_t
+key SPACE 0.3
+wait 3
+wait 1
+shot play_penguinw_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_penguinw_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_penguinw_p2
+load SL/profmj
+wait 30
+shot play_profmj_t
+key ENTER 0.3
+wait 3
+wait 1
+shot play_profmj_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_profmj_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_profmj_p2
+load SL/rebirth
+wait 45
+shot play_rebirth_t
+key SPACE 0.3
+wait 3
+wait 1
+shot play_rebirth_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_rebirth_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_rebirth_p2
+load SL/relics
+wait 60
+shot play_relics_t
+key SPACE 0.3
+wait 3
+wait 1
+shot play_relics_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_relics_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_relics_p2
+load SL/sangoku
+wait 30
+shot play_sangoku_t
+key SPACE 0.3
+wait 3
+wait 1
+shot play_sangoku_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_sangoku_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_sangoku_p2
+load SL/simulwar
+wait 60
+shot play_simulwar_t
+key SPACE 0.3
+wait 3
+wait 1
+shot play_simulwar_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_simulwar_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_simulwar_p2
+load SL/triton
+wait 30
+shot play_triton_t
+key SPACE 0.3
+wait 3
+wait 1
+shot play_triton_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_triton_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_triton_p2
+load SL/xevious
+wait 30
+shot play_xevious_t
+key SPACE 0.3
+wait 3
+key SPACE 0.3
+wait 3
+wait 1
+shot play_xevious_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_xevious_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_xevious_p2
+load SL/hashires
+wait 30
+shot play_hashires_t
+key F6 0.3
+wait 3
+wait 1
+shot play_hashires_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_hashires_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_hashires_p2
+load SL/murdclub
+wait 40
+shot play_murdclub_t
+key 1 0.3
+wait 3
+wait 1
+shot play_murdclub_s
+key KP6 1.0
+key KP4 1.0
+key RIGHT 1.0
+key LEFT 1.0
+key KP8 0.5
+key UP 0.5
+key SPACE 0.3
+wait 1
+shot play_murdclub_p
+key KP2 0.5
+key DOWN 0.5
+key SPACE 0.3
+wait 10
+shot play_murdclub_p2
