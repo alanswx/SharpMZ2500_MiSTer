@@ -97,8 +97,10 @@ module mz2500
 reg  ipl_reset;               // IPL reset from 8255 PC3 (BST) held low
 wire rom_dl    = ioctl_download && ioctl_index == 8'd0;    // boot.rom: holds the machine in reset
 wire tape_dl   = ioctl_download && ioctl_index == 8'd1;    // MZT tape image into SDRAM
+wire snap_dl   = ioctl_download && ioctl_index == 8'd2;    // RAM image into main RAM 0000-FFFF
+reg  snap_boot;                // then the CPU boots it through a stub (see "RAM image boot")
 reg  clr_busy = 1'b0;          // main RAM clear at core load (see the SDRAM arbiter)
-wire sys_reset = reset | rom_dl | ipl_reset | clr_busy;
+wire sys_reset = reset | rom_dl | snap_dl | ipl_reset | clr_busy;
 reg  [3:0] cpu_rst_cnt;       // special reset: CPU reset pulse
 wire cpu_reset = sys_reset | (cpu_rst_cnt != 4'd0);
 
@@ -122,7 +124,9 @@ localparam integer OPN_HZ     = 2000000;
 // boot mode, latched at reset (CSP reads config.boot_mode at power on)
 reg  [1:0] boot_m;
 reg        m2520;
-always @(posedge clk_sys) if (reset) begin boot_m <= boot_mode; m2520 <= model_2520; end
+always @(posedge clk_sys)
+	if (reset) begin boot_m <= boot_mode; m2520 <= model_2520; end
+	else if (snap_dl) boot_m <= 2'd1;        // RAM images are MZ-2000 software (mz2000_snap)
 wire       mode_2500 = boot_m == 2'd0;
 wire [27:0] cpu_hz = mode_2500 ? CPU_HZ : CPU_HZ_LOW;
 
@@ -309,6 +313,7 @@ end
 wire ld_ipl   = rom_dl && ioctl_addr[24:16] == 9'd0;        // MZ-2500 IPL 000000-007FFF, MZ-2520 IPL 008000-00FFFF
 wire ld_kanji = rom_dl && ioctl_addr[24:16] >= 9'd1 && ioctl_addr[24:16] <= 9'd4;
 wire ld_tape  = tape_dl && ioctl_addr[24:20] == 5'd0;      // up to 1 MB at SDRAM 100000
+wire ld_snap  = snap_dl && ioctl_addr[24:16] == 9'd0;       // 64 KB at main RAM 000000 (pages 00-07)
 
 // SDRAM holds main RAM 256 KB (pages 00-1F) at 000000-03FFFF, the IPL ROM (pages 34-37) at 040000-047FFF (MZ-2520:
 // 048000-04FFFF) and the
@@ -421,6 +426,9 @@ always @(posedge clk_sys) begin
 	end
 	if (ld_kanji && ioctl_wr) begin
 		ld_pend <= 1'b1; ld_addr <= {5'd0, 2'b10, kanji_ld_addr}; ld_data <= ioctl_dout;
+	end
+	if (ld_snap && ioctl_wr) begin
+		ld_pend <= 1'b1; ld_addr <= {9'd0, ioctl_addr[15:0]}; ld_data <= ioctl_dout;
 	end
 	// Reset clears only the CPU side. MiSTer Main holds the core in reset (status bit 0) while it sends boot.rom, so
 	// download writes must go on, and an access in progress is left to finish (the controller always answers).
@@ -648,7 +656,7 @@ end
 
 always @(posedge clk_sys) begin
 	ipl_reset <= 1'b0;
-	if (reset | rom_dl | ipl_reset) begin
+	if (reset | rom_dl | snap_dl | ipl_reset) begin
 		ppi_pa <= 8'h00; ppi_pc <= 8'h00;
 		cpu_rst_cnt <= 4'd0;
 		bst_cnt <= 14'd0;
@@ -660,6 +668,8 @@ always @(posedge clk_sys) begin
 		ppi_pc <= ppi_pc_new;
 		// NST (PC1) 0 -> 1: special reset
 		if (!ppi_pc[1] && ppi_pc_new[1]) cpu_rst_cnt <= 4'd15;
+		// the RAM-image boot stub's last write (B7) maps pages 00-07: restart the CPU at 0000 there (as MAME)
+		if (snap_boot && io_wr_end && port == 8'hB7) cpu_rst_cnt <= 4'd15;
 		// BST (PC3) 1 -> 0 starts the IPL reset timer, 0 -> 1 cancels it (CSP cmt.cpp, 100 us)
 		if (ppi_pc[3] && !ppi_pc_new[3]) bst_cnt <= CLK_SYS_HZ / 10000;   // 100 us
 		else if (ppi_pc_new[3]) bst_cnt <= 14'd0;
@@ -878,6 +888,25 @@ mz2500_kbd kbd
 );
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// RAM image boot (OSD "Load RAM image", ioctl index 2)
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+// MAME's mz2000_snap loader copies the image to RAM at 0000, drops the IPL and resets the CPU. Here the image goes
+// to main RAM 0000-FFFF while the machine is held in reset; then, instead of the IPL, the CPU runs a stub
+// (rtl/mz2500_snapboot.sv, from the IPL's own I/O writes up to its jump to a tape program in MZ-2000 mode: CRTC,
+// palettes, PIT, PIO, 8255) out of page 34. Its last write, B7 = 3, maps pages 00-07 and the CPU is reset into the
+// image. The IPL can't do this itself: its handover stub sits at C000 and its work area at F800, which the larger
+// images (60 KB and up) overwrite.
+always @(posedge clk_sys) begin
+	if (reset) snap_boot <= 1'b0;
+	else if (snap_dl) snap_boot <= 1'b1;
+	else if (io_wr_end && port == 8'hB7) snap_boot <= 1'b0;
+end
+wire [7:0] snap_q;
+mz2500_snapboot snapboot(.clk(clk_sys), .addr(cur_off[9:0]), .q(snap_q));
+wire snap_rd = snap_boot && cur_page == 6'h34 && cur_off[12:10] == 3'd0;
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // CPU data input
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -891,6 +920,7 @@ always @(*) begin
 		6'h39: mem_dout = kwin ? ram_q : vid_mem_dout;
 		default: mem_dout = 8'hFF;
 	endcase
+	if (snap_rd) mem_dout = snap_q;
 end
 
 always @(*) begin

@@ -273,6 +273,7 @@ typedef enum
 	STATE_ROT_WALK3,
 	STATE_ROT_WALK4,
 	STATE_ROT_WALK5,
+	STATE_ROT_STEPT,
 	STATE_ROT_END,
 	STATE_ROT_WAIT,
 	STATE_ROT_PRE,
@@ -501,6 +502,7 @@ always @(posedge clk_sys) begin
 	reg        cmd_e;                    // E flag (head load delay) of the command
 	reg [15:0] rot_t0, rot_lat, drq_tick;
 	reg  [7:0] rot_otrack;               // head position when the type I command started
+	reg  [7:0] rot_steps;                // steps it moved (STATE_WAIT; the time is in STATE_ROT_STEPT, for timing)
 	reg  [1:0] rot_rate;                 // its step rate bits
 	reg [12:0] g_pos;
 	reg  [8:0] g_n;
@@ -1164,20 +1166,23 @@ always @(posedge clk_sys) begin
 				begin
 					wait_time <= 4000;
 					state <= STATE_WAIT_2;
-					if(ROT && rot_seek) begin : steptime
-						// 6/12/20/30 ms a step (1 MHz controller clock) in byte times, the first 0.5 ms shorter;
+					if(ROT && rot_seek) begin
 						// disk_track already holds where the command left the head
-						reg  [7:0] steps;
-						reg  [9:0] rate;
-						reg [17:0] t;
-						steps = (disk_track > rot_otrack) ? disk_track - rot_otrack : rot_otrack - disk_track;
-						rate  = (rot_rate == 2'd0) ? 10'd188 : (rot_rate == 2'd1) ? 10'd375 :
-						        (rot_rate == 2'd2) ? 10'd625 : 10'd938;
-						t = steps * rate;
-						rot_t0  <= rtick;
-						rot_lat <= (steps == 0) ? 16'd1 : (t > 18'd65535) ? 16'hFFFF : t[15:0] - 16'd16;
-						state   <= STATE_ROT_SEEK;
+						rot_steps <= (disk_track > rot_otrack) ? disk_track - rot_otrack : rot_otrack - disk_track;
+						state     <= STATE_ROT_STEPT;
 					end
+				end
+			STATE_ROT_STEPT:
+				begin : steptime
+					// 6/12/20/30 ms a step (1 MHz controller clock) in byte times, the first 0.5 ms shorter
+					reg  [9:0] rate;
+					reg [17:0] t;
+					rate  = (rot_rate == 2'd0) ? 10'd188 : (rot_rate == 2'd1) ? 10'd375 :
+					        (rot_rate == 2'd2) ? 10'd625 : 10'd938;
+					t = rot_steps * rate;
+					rot_t0  <= rtick;
+					rot_lat <= (rot_steps == 0) ? 16'd1 : (t > 18'd65535) ? 16'hFFFF : t[15:0] - 16'd16;
+					state   <= STATE_ROT_SEEK;
 				end
 			STATE_WAIT_2:
 				begin

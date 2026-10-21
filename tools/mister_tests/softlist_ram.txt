@@ -1,0 +1,273 @@
+# MZ-2000 RAM images (MAME 0.289 mz2000_snap) through the direct loader (OSD "Load RAM image", ioctl index 2).
+# Boot mode left at MZ-2500 on purpose: the loader switches to MZ-2000 itself. Start keys from the title screens,
+# then a little play input (cursor keys and the ten-key pad, as these games use one or the other).
+cfg bootmode 2500
+cfg keyboard jp
+load SL/ram_binary
+wait 8
+shot ram_binary_title
+key SPACE 0.2
+wait 3
+shot ram_binary_k0
+key RIGHT 1.0
+key KP6 1.0
+key UP 0.6
+key KP8 0.6
+key LEFT 1.0
+key KP4 1.0
+key SPACE 0.2
+wait 1
+shot ram_binary_play
+wait 6
+shot ram_binary_play2
+load SL/ram_frntline
+wait 8
+shot ram_frntline_title
+key ENTER 0.2
+wait 3
+shot ram_frntline_k0
+key RIGHT 1.0
+key KP6 1.0
+key UP 0.6
+key KP8 0.6
+key LEFT 1.0
+key KP4 1.0
+key SPACE 0.2
+wait 1
+shot ram_frntline_play
+wait 6
+shot ram_frntline_play2
+load SL/ram_wildwest
+wait 8
+shot ram_wildwest_title
+key SPACE 0.2
+wait 3
+shot ram_wildwest_k0
+key ENTER 0.2
+wait 3
+shot ram_wildwest_k1
+key RIGHT 1.0
+key KP6 1.0
+key UP 0.6
+key KP8 0.6
+key LEFT 1.0
+key KP4 1.0
+key SPACE 0.2
+wait 1
+shot ram_wildwest_play
+wait 6
+shot ram_wildwest_play2
+load SL/ram_xetter2k
+wait 8
+shot ram_xetter2k_title
+key 1 0.2
+wait 3
+shot ram_xetter2k_k0
+key RIGHT 1.0
+key KP6 1.0
+key UP 0.6
+key KP8 0.6
+key LEFT 1.0
+key KP4 1.0
+key SPACE 0.2
+wait 1
+shot ram_xetter2k_play
+wait 6
+shot ram_xetter2k_play2
+load SL/ram_xeter2k2
+wait 8
+shot ram_xeter2k2_title
+key 1 0.2
+wait 3
+shot ram_xeter2k2_k0
+key SPACE 0.2
+wait 3
+shot ram_xeter2k2_k1
+key RIGHT 1.0
+key KP6 1.0
+key UP 0.6
+key KP8 0.6
+key LEFT 1.0
+key KP4 1.0
+key SPACE 0.2
+wait 1
+shot ram_xeter2k2_play
+wait 6
+shot ram_xeter2k2_play2
+load SL/ram_dawnptrl
+wait 8
+shot ram_dawnptrl_title
+key SPACE 0.2
+wait 3
+shot ram_dawnptrl_k0
+key RIGHT 1.0
+key KP6 1.0
+key UP 0.6
+key KP8 0.6
+key LEFT 1.0
+key KP4 1.0
+key SPACE 0.2
+wait 1
+shot ram_dawnptrl_play
+wait 6
+shot ram_dawnptrl_play2
+load SL/ram_mahjong
+wait 8
+shot ram_mahjong_title
+key SPACE 0.2
+wait 3
+shot ram_mahjong_k0
+key ENTER 0.2
+wait 3
+shot ram_mahjong_k1
+key RIGHT 1.0
+key KP6 1.0
+key UP 0.6
+key KP8 0.6
+key LEFT 1.0
+key KP4 1.0
+key SPACE 0.2
+wait 1
+shot ram_mahjong_play
+wait 6
+shot ram_mahjong_play2
+load SL/ram_mariosp
+wait 8
+shot ram_mariosp_title
+key SPACE 0.2
+wait 3
+shot ram_mariosp_k0
+key ENTER 0.2
+wait 3
+shot ram_mariosp_k1
+key RIGHT 1.0
+key KP6 1.0
+key UP 0.6
+key KP8 0.6
+key LEFT 1.0
+key KP4 1.0
+key SPACE 0.2
+wait 1
+shot ram_mariosp_play
+wait 6
+shot ram_mariosp_play2
+load SL/ram_cloudkdm
+wait 8
+shot ram_cloudkdm_title
+key SPACE 0.2
+wait 3
+shot ram_cloudkdm_k0
+key ENTER 0.2
+wait 3
+shot ram_cloudkdm_k1
+key RIGHT 1.0
+key KP6 1.0
+key UP 0.6
+key KP8 0.6
+key LEFT 1.0
+key KP4 1.0
+key SPACE 0.2
+wait 1
+shot ram_cloudkdm_play
+wait 6
+shot ram_cloudkdm_play2
+load SL/ram_falcadv
+wait 8
+shot ram_falcadv_title
+key SPACE 0.2
+wait 3
+shot ram_falcadv_k0
+key ENTER 0.2
+wait 3
+shot ram_falcadv_k1
+key RIGHT 1.0
+key KP6 1.0
+key UP 0.6
+key KP8 0.6
+key LEFT 1.0
+key KP4 1.0
+key SPACE 0.2
+wait 1
+shot ram_falcadv_play
+wait 6
+shot ram_falcadv_play2
+load SL/ram_flicky
+wait 8
+shot ram_flicky_title
+key SPACE 0.2
+wait 3
+shot ram_flicky_k0
+key ENTER 0.2
+wait 3
+shot ram_flicky_k1
+key RIGHT 1.0
+key KP6 1.0
+key UP 0.6
+key KP8 0.6
+key LEFT 1.0
+key KP4 1.0
+key SPACE 0.2
+wait 1
+shot ram_flicky_play
+wait 6
+shot ram_flicky_play2
+load SL/ram_lucy
+wait 8
+shot ram_lucy_title
+key SPACE 0.2
+wait 3
+shot ram_lucy_k0
+key ENTER 0.2
+wait 3
+shot ram_lucy_k1
+key RIGHT 1.0
+key KP6 1.0
+key UP 0.6
+key KP8 0.6
+key LEFT 1.0
+key KP4 1.0
+key SPACE 0.2
+wait 1
+shot ram_lucy_play
+wait 6
+shot ram_lucy_play2
+load SL/ram_plazmaln
+wait 8
+shot ram_plazmaln_title
+key SPACE 0.2
+wait 3
+shot ram_plazmaln_k0
+key ENTER 0.2
+wait 3
+shot ram_plazmaln_k1
+key RIGHT 1.0
+key KP6 1.0
+key UP 0.6
+key KP8 0.6
+key LEFT 1.0
+key KP4 1.0
+key SPACE 0.2
+wait 1
+shot ram_plazmaln_play
+wait 6
+shot ram_plazmaln_play2
+load SL/ram_undrgrnd
+wait 8
+shot ram_undrgrnd_title
+key SPACE 0.2
+wait 3
+shot ram_undrgrnd_k0
+key ENTER 0.2
+wait 3
+shot ram_undrgrnd_k1
+key RIGHT 1.0
+key KP6 1.0
+key UP 0.6
+key KP8 0.6
+key LEFT 1.0
+key KP4 1.0
+key SPACE 0.2
+wait 1
+shot ram_undrgrnd_play
+wait 6
+shot ram_undrgrnd_play2

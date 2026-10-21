@@ -21,11 +21,13 @@ shares the T80, 8255, 8253, Z80 PIO, floppy and tape RTL.
 3. Disks: `.d88` images in Drive 1-4 from the OSD, then reset. The IPL boots drive 1.
 4. Tapes (MZ-2000 / MZ-80B software): set Boot mode to MZ-2000 or MZ-80B, Load tape (`.mzt`), reset and press C
    at the IPL menu. Loading runs at real tape speed (BASIC takes a few minutes).
+   RAM images (MAME `mz2000_snap` `.bin`, MZ-2000 memory from 0000): Load RAM image starts them at once, in MZ-2000
+   mode whatever the Boot mode; a reset goes back to the IPL.
 5. OSD options: Lines (400 = 24 kHz monitor, 200 = 15 kHz), Boot mode (MZ-2500 / MZ-2000 / MZ-80B, applies at reset),
    Keyboard (Japanese positional layout or US symbols), Model (MZ-2500 / MZ-2520, applies at reset).
 6. Keys: F11 = HELP, Print Screen = COPY (F12 opens the MiSTer menu), End or Pause = BREAK, Home = CLR/HOME,
    Insert/Delete = INST/DEL, Alt = GRAPH, Caps Lock = LOCK. The mouse and joystick 1 work (Dust Box menus, games).
-7. MGL launchers: `tools/make_mgls.py` writes one per disk and tape (`_Computer/_SharpMZ2500/`).
+7. MGL launchers: `tools/make_mgls.py` writes one per disk, tape and RAM image (`_Computer/_SharpMZ2500/`).
 
 ## Status: Ys III boots from floppy and plays its intro (simulation)
 

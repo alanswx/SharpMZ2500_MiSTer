@@ -66,6 +66,7 @@ struct Options {
     uint32_t    sd_latency = 0;           // --sd-latency N: clocks from a block request to sd_ack (the HPS takes ~0.1-1 ms)
     std::string wav_file;                 // --wav: audio output, 48 kHz 16-bit stereo
     std::string tape_file;                // --tape: MZT image (ioctl index 1)
+    std::string ramimg_file;              // --ramimg: RAM image run from 0000 in MZ-2000 mode (ioctl index 2)
     int         boot_mode = 0;            // --boot-mode 2500|2000|80b
     uint32_t    save_frame = 0;           // --save-state FRAME:FILE
     std::string save_file;
@@ -104,6 +105,7 @@ static void usage()
 "  --dump-at-cpu-cycle N  write main RAM (SDRAM model) to out/ram_dump.hex and print the MMU pages at CPU cycle N\n"
 "  --mouse F:DX:DY:B      PS/2 mouse packet at frame F (DX right, DY up, B: 1 left, 2 right), repeatable\n"
 "  --tape FILE            MZT tape image in the data recorder (loaded through ioctl index 1)\n"
+"  --ramimg FILE          RAM image (mz2000_snap .bin) at 0000, run in MZ-2000 mode (ioctl index 2)\n"
 "  --boot-mode M          front-panel boot switch: 2500 (default), 2000 or 80b\n"
 "  --wav FILE             record the audio output (48 kHz, 16-bit stereo WAV)\n"
 "  --ipl FILE, --kanji FILE   load IPL.ROM / KANJI.ROM separately (default: ../software/roms/extracted/...)\n"
@@ -163,6 +165,7 @@ static bool parse_args(int argc, char **argv, Options &o)
         else if (a == "--sd-latency") o.sd_latency = parse_num(next());
         else if (a == "--wav") o.wav_file = next();
         else if (a == "--tape") o.tape_file = next();
+        else if (a == "--ramimg") o.ramimg_file = next();
         else if (a == "--boot-mode") { std::string m = next(); o.boot_mode = (m == "2000") ? 1 : (m == "80b" || m == "80B") ? 2 : 0; }
         else if (a == "--save-state") {
             std::string v = next();
@@ -645,6 +648,13 @@ int Sim::run()
         ioctl_load(0, t, 1);
         top->ioctl_index = 0;
         if (!opt.quiet) fprintf(stderr, "[sim] tape '%s', %zu bytes\n", opt.tape_file.c_str(), t.size());
+    }
+    if (!opt.ramimg_file.empty()) {
+        std::vector<uint8_t> t;
+        if (!read_file(opt.ramimg_file, t)) { fprintf(stderr, "cannot read %s\n", opt.ramimg_file.c_str()); return 2; }
+        ioctl_load(0, t, 2);
+        top->ioctl_index = 0;
+        if (!opt.quiet) fprintf(stderr, "[sim] RAM image '%s', %zu bytes\n", opt.ramimg_file.c_str(), t.size());
     }
     // Discard the partial picture before the first full frame.
     while (!top->VGA_VB) clock();

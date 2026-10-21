@@ -81,6 +81,7 @@ localparam CONF_STR =
 `endif
 	"-;",
 	"F1,MZT,Load tape;",
+	"F2,BINDAT,Load RAM image (MZ-2000);",
 	"-;",
 	"O[1],Lines (front switch),400 (24 kHz),200 (15 kHz);",
 	"O[3:2],Boot mode (reset),MZ-2500,MZ-2000,MZ-80B;",

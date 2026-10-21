@@ -6,7 +6,8 @@
 GAMESDIR is the core's games folder layout (as on the SD card, games/SharpMZ2500): disks/*.d88 and tapes/*.mzt.
 Every disk gets an MGL that mounts it in drive 1; a disk named *_Program.d88 with a matching *_User.d88 gets one
 MGL with both drives (e.g. Ys III); every tape gets an MGL that loads it (set the boot mode in the OSD for
-MZ-2000/80B tapes). Paths in the MGLs are relative to games/SharpMZ2500.
+MZ-2000/80B tapes); every RAM image in ram/*.bin (MAME mz2000_snap) gets one that loads it (runs in MZ-2000 mode
+whatever the OSD boot mode). Paths in the MGLs are relative to games/SharpMZ2500.
 """
 import os, sys
 
@@ -34,3 +35,7 @@ tdir = os.path.join(games, 'tapes')
 for t in sorted(os.listdir(tdir)) if os.path.isdir(tdir) else []:
     if t.lower().endswith('.mzt'):
         mgl('Tape ' + t[:-4].replace('_', ' '), [('f', 1, 'tapes/' + t)])
+rdir = os.path.join(games, 'ram')
+for t in sorted(os.listdir(rdir)) if os.path.isdir(rdir) else []:
+    if t.lower().endswith(('.bin', '.dat')):
+        mgl('RAM ' + t[:-4].replace('_', ' '), [('f', 2, 'ram/' + t)])

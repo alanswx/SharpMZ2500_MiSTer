@@ -233,7 +233,16 @@ CPU trace from reset matching the reference emulator for the first few thousand 
       including Polar Star II, Puck Man and Door Door (MAME: not working) and Ice Block (BubiZ hangs on the MZT)
 - [x] mz2000_snap (RAM images run at 0000) as one-record MZTs through the IPL (`softlist_snap.txt`): ten run in BubiZ
       and on hardware; Binary Land, Front Line, Wild Western and Xetter 2000 (60 KB or more) never finish loading
-- [ ] Direct RAM-image load from the OSD (snapshots of 60 KB+, Flicky/Champion Pro-Wrestling debug titles)
+- [x] Direct RAM-image load (OSD "Load RAM image", ioctl index 2, 2026-10-20): the image goes to main RAM 0000-FFFF
+      with the machine held in reset, then a stub out of page 34 replays the IPL's MZ-2000-mode I/O setup (CRTC,
+      palettes, PIT, PIO, 8255; rtl/mz2500_snapboot.sv from tools/make_snapboot.py and a sim trace) and writes B7 = 3,
+      and the CPU restarts at 0000 (as MAME's mz2000_snap loader); the boot mode switches to MZ-2000 by itself.
+      On hardware (20261020, `softlist_ram.txt`, `softlist_ram2.txt`) all 14 game images start, including the four
+      that never loaded from tape (Binary Land, Front Line, Wild Western, Xetter 2000). Play-tested into the game:
+      Binary Land, Front Line, Wild Western, Xetter 2000, Xetter II, Dawn Patrol, Mahjong, Mario Bros. Special, Cloud
+      Kingdom, Falcon Adventure, Flicky, Lucy, Plazma Line; Underground City reaches its demo as in BubiZ
+- [ ] Champion Pro-Wrestling Special / Flicky (MZ-2500 versions in `software/`): not RAM images but debugger scripts
+      (breakpoints, several dumps, PC changes in place of a protected loader); Flicky runs from mz2000_snap
 - [x] MZ-80B on hardware (`softlist_mz80b.txt`): BASIC SB-5510, Vosque and Disk BASIC SB-6510/6610/6511 from tape
       (no disk mounted: the IPL boots a disk first); the games disk (tools/dsk2d88.py) boots by itself to its
       DISK-STARTUP menu, and Space-Bee runs
@@ -250,4 +259,3 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 - [ ] SASI HDD (MZ-1E30), EMM (MZ-1R37), MZ-1R12/1R13
 - [ ] RS-232C on SIO channel A to the MiSTer UART
 - [ ] Printer port (FE-FF) to the MiSTer UART (SharpMZ's `mz_printer.sv` and mister_printerd)
-- [ ] Debug load path for the two debugger-injected titles in `software/` (Champion Pro-Wrestling Special, Flicky)
