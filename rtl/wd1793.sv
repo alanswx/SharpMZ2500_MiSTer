@@ -498,6 +498,7 @@ always @(posedge clk_sys) begin
 	reg        rot_cmd;                  // this type II/III command runs on the rotation model
 	reg        rot_seek;                 // this type I command's busy time is a step time
 	reg        rot_first;                // the next DRQ is the sector's first byte: put the head there
+	reg        rot_pf;                   // sector fetched from SD during the rotational wait: hold its first DRQ
 	reg        rot_rnf;
 	reg        cmd_e;                    // E flag (head load delay) of the command
 	reg [15:0] rot_t0, rot_lat, drq_tick;
@@ -617,6 +618,7 @@ always @(posedge clk_sys) begin
 		seektimer <= 'h3FF;
 		{ack, sd_wr, sd_rd, sd_busy} <= 0;
 		ra_sector <= 1;
+		rot_pf <= 0;
 	end else if(ce) begin
 
 		ack <= {ack[4:0], sd_ack};
@@ -806,7 +808,8 @@ always @(posedge clk_sys) begin
 				begin
 					if(read_timer) read_timer <= read_timer - 1'b1;
 					// rotation: one byte per byte time; the first byte puts the head at the field's start
-					if(!read_timer && (!rot_cmd || rot_first || (rtick != drq_tick))) begin
+					if(!read_timer && !(rot_pf && ((rtick - rot_t0) < rot_lat)) && (!rot_cmd || rot_first || (rtick != drq_tick))) begin
+						rot_pf   <= 0;
 						drq_tick <= rtick;
 						if(rot_cmd && rot_first) begin
 							rot_first <= 0;
@@ -923,8 +926,9 @@ always @(posedge clk_sys) begin
 				end
 			STATE_WRITE_1:
 				begin
-					read_timer <= read_timer - 1'b1;
-					if(!read_timer) begin
+					if(read_timer) read_timer <= read_timer - 1'b1;
+					if(!read_timer && !(rot_pf && ((rtick - rot_t0) < rot_lat))) begin
+						rot_pf <= 0;
 						write_data <= 0;
 						watchdog_set <= 0;
 						s_lostdata <= 0;
@@ -1136,12 +1140,18 @@ always @(posedge clk_sys) begin
 					if(!best_found) begin
 						rot_rnf <= 1;
 						rot_lat <= 16'd31250 - {3'b0, g_pos} + (cmd_e ? 16'd938 : 16'd0);
+						state <= STATE_ROT_WAIT;
 					end else begin
+						// fetch the sector from SD now and let the rotational wait run out in STATE_READ_1 /
+						// STATE_WRITE_1: fetched after the wait, the SD latency was added to every sector, as if
+						// the disk stopped while the HPS answered (Ys III loads 3 ms/sector slower at 3 ms)
 						rot_lat    <= lat[15:0];
 						edsk_addr  <= best_m_idx;
 						edsk_start <= best_m_idx;
+						rot_first  <= 1;
+						rot_pf     <= 1;
+						state      <= STATE_ROT_PRE;
 					end
-					state <= STATE_ROT_WAIT;
 				end
 			STATE_ROT_WAIT:
 				begin
@@ -1255,6 +1265,7 @@ always @(posedge clk_sys) begin
 							{s_seekerr, s_crcerr} <= 0;
 							// rotation model: per-command flags; a type I command's busy time is its steps
 							rot_cmd  <= 0;
+							rot_pf   <= 0;
 							rot_seek <= ~din[7];
 							cmd_e    <= din[2];
 							rot_otrack <= disk_track;   // the step time is worked out in STATE_WAIT from the distance moved

@@ -4,6 +4,16 @@ Builds in `releases/` are tester builds: copy one to `/media/fat/_Computer/` on 
 [README](README.md#getting-started-on-a-mister)). Newest first. Builds not listed here were intermediate and are not
 in the repository.
 
+## Next (not released yet; test build releases/SharpMZ2500_20261102.rbf, local)
+
+- Graphics scroll registers (fine scroll HDSC, SAD1, SAD2, split line SLN1) are taken once per frame with the start
+  address: Druaga's sideways scrolling no longer tears with an 8-dot jump in the lower part of the screen.
+- OSD **Lines (reset)**: the 200/400-line switch now takes effect at reset, like Boot mode. Games read it when they
+  start, and switching mid-game left them with the other mode's timing (Druaga lost its bottom 20 lines).
+- Floppy: a sector is fetched from the SD card while the disk turns to it, instead of after: the MiSTer's SD latency
+  no longer adds to every sector read (up to about 1 ms is hidden completely), so loads, and the silence some games
+  keep while loading, are as long as on the real machine.
+
 ## 20261021b
 
 - Dictionary ROM (page 3A, bank port CE), phone ROM (pages 3C-3F) and the MZ-1R13 kanji ROM (ports B8/B9), loaded from

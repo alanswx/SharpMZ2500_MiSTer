@@ -83,7 +83,7 @@ localparam CONF_STR =
 	"F1,MZT,Load tape;",
 	"F2,BINDAT,Load RAM image (MZ-2000);",
 	"-;",
-	"O[1],Lines (front switch),400 (24 kHz),200 (15 kHz);",
+	"O[1],Lines (reset),400 (24 kHz),200 (15 kHz);",
 	"O[3:2],Boot mode (reset),MZ-2500,MZ-2000,MZ-80B;",
 	"O[7],Keyboard,Japanese (positional),US (symbols);",
 	"O[8],Model (reset),MZ-2500,MZ-2520;",
@@ -213,7 +213,12 @@ wire reset = RESET | status[0] | buttons[1] | ~pll_locked;
 
 /////////////////  MACHINE  ///////////////////////
 
-wire        lines400 = ~status[1];
+// the 200/400-line switch takes effect at reset, like Boot mode and Model: software reads it when it starts and
+// programs the CRTC once, so a change mid-game left the old timing values on the new raster (Druaga lost its bottom
+// 20 lines at 200). During reset the new setting passes through, so the video registers reset to its values.
+reg         lines400_l = 1'b1;
+always @(posedge clk_sys) if (reset) lines400_l <= ~status[1];
+wire        lines400 = reset ? ~status[1] : lines400_l;
 wire        ce_pix;
 wire  [7:0] R, G, B;
 wire        HSync, VSync, HBlank, VBlank;

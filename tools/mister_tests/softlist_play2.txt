@@ -1,0 +1,89 @@
+# Play tests for the disk titles not yet past their title prompts (2026-11-02; key sequences worked out in BubiZ):
+#   Black Onyx, Fire Crystal: character disk drive (1), any key, main menu
+#   Eiyuu Densetsu (disks A+B): intro, hero name, into the forest
+#   Harley Fox (disks 1+2): story pages (any key), new game (N), the forest
+#   Lizard: new character (1), name, confirm (1), class choice
+#   Marvelous: make a character, confirm erasing the one in play, name
+#   Doukeshi Satsujin Jiken (disks 1+2) and Kitahei start by themselves; Fenix is a shell (prompt)
+cfg lines 400
+cfg model 2500
+cfg keyboard jp
+cfg bootmode 2500
+load SL/blckonyx
+wait 32
+shot p2_blckonyx_drive
+key 1 0.15
+wait 22
+shot p2_blckonyx_title
+key SPACE 0.15
+wait 12
+shot p2_blckonyx_menu
+load SL/firecrys
+wait 32
+shot p2_firecrys_drive
+key 1 0.15
+wait 26
+shot p2_firecrys_title
+key SPACE 0.15
+wait 12
+shot p2_firecrys_menu
+load SL/eiyuden
+wait 94
+shot p2_eiyuden_name
+key A 0.15
+wait 3
+key ENTER 0.15
+wait 15
+shot p2_eiyuden_forest
+load SL/hfox
+wait 72
+shot p2_hfox_story
+key SPACE 0.15
+wait 10
+key SPACE 0.15
+wait 10
+key SPACE 0.15
+wait 10
+key SPACE 0.15
+wait 10
+key SPACE 0.15
+wait 10
+key SPACE 0.15
+wait 13
+shot p2_hfox_continue
+key N 0.15
+wait 15
+shot p2_hfox_forest
+load SL/lizard
+wait 42
+shot p2_lizard_menu
+key 1 0.15
+wait 10
+key A 0.15
+wait 3
+key ENTER 0.15
+wait 7
+key 1 0.15
+wait 8
+shot p2_lizard_class
+load SL/marvels
+wait 37
+shot p2_marvels_menu
+key ENTER 0.15
+wait 10
+key ENTER 0.15
+wait 7
+key A 0.15
+wait 3
+key ENTER 0.15
+wait 6
+shot p2_marvels_name
+load SL/mclown
+wait 95
+shot p2_mclown_game
+load SL/kitahei
+wait 40
+shot p2_kitahei_board
+load SL/fenix
+wait 30
+shot p2_fenix_shell

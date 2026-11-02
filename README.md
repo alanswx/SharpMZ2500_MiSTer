@@ -44,7 +44,7 @@ shares the T80, 8255, 8253, Z80 PIO, floppy and tape RTL.
 |---|---|
 | Drive 1, Drive 2 | D88 images |
 | Load tape / Load RAM image | MZT tape for the data recorder / mz2000_snap image, run at once |
-| Lines | 400 (24 kHz monitor, the default) or 200 (15 kHz): the machine's front switch; software reads it |
+| Lines (reset) | 400 (24 kHz monitor, the default) or 200 (15 kHz): the machine's front switch. Takes effect at the next Reset, since games read it when they start |
 | Boot mode | MZ-2500, MZ-2000 or MZ-80B: the mode switch, read at reset |
 | Keyboard | Japanese (positional: a Japanese MZ keyboard on PC keys, as in the emulators) or US (the symbols printed on a US keyboard) |
 | Model | MZ-2500 or MZ-2520 (its IPL boots only from floppy), at reset |

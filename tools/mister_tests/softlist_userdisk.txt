@@ -1,5 +1,6 @@
 # Play tests past the questions that stopped softlist_play.txt (key sequences worked out in BubiZ):
-#   Laydock: saved players on the game disk (YES, pick, B picks the other one), menus, SCENE 01, play
+#   Laydock: saved players on the game disk (YES, A picks YAMATO; B's list is open at shot b: DOWN to MUSASI), menus,
+#   SCENE 01, play
 #   Nobunaga no Yabou: monochrome (n), new game (n)
 #   Sangokushi (disks A+B): new game, scenario, players, hero, stat roulette, settings, map and command menu
 #   Moon Child: MAKE CHARACTER onto a blank data disk in drive 2 (sl/moonchld_data.d88 from tools/blank_d88.py,
@@ -20,11 +21,9 @@ shot ud_laydock_a2
 key ENTER 0.35
 wait 8
 shot ud_laydock_b
-key ENTER 0.35
-wait 6
-shot ud_laydock_b2
 key DOWN 0.35
 wait 3
+shot ud_laydock_b2
 key ENTER 0.35
 wait 8
 shot ud_laydock_status

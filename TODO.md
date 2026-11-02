@@ -274,8 +274,48 @@ CPU trace from reset matching the reference emulator for the first few thousand 
       Mugen II move with the ten-key (2 = down), not the cursor keys
 - [ ] Mugen II: wants a "user disk" in drive 1 after the start question; a blank formatted disk is "not a user disk"
       in BubiZ too, and the way to make one wasn't found. The OSD Drive 1 browser opens at the mounted image, so a
-      plan can swap disks with F12, ENTER, DOWN..., ENTER
-- [ ] The remaining disk titles past their title screens
+      plan can swap disks with F12, ENTER, DOWN..., ENTER (see also the 2026-11-02 note above)
+- [ ] The remaining disk titles past their title screens (`softlist_play2.txt`, 2026-11-02, key sequences from
+      BubiZ). On hardware (20261102): Black Onyx and Fire Crystal (drive 1, any key) to their main menus, Eiyuu
+      Densetsu (name) into the forest, Harley Fox (story pages, N = new game) into the forest, all as in BubiZ.
+      In BubiZ, not yet on hardware: Lizard (1, name, 1) to the class choice, Marvelous (make a character, confirm,
+      name), Doukeshi Satsujin Jiken and Kitahei start by themselves, Fenix is a shell; Sound Gal asks for its
+      "Master Disk on FD1" in BubiZ too. Not games: BASIC v1/v2, Multiplan, COBOL, CP/M, Kaleidoscope, the demo,
+      phone and unk disks, Yuukaku 2 (word processor)
+- [ ] Laydock plan: player B's saved-player list is already open at shot `ud_laydock_b` on hardware, and the plan's
+      ENTER took YAMATO again ("Do not use"); the list has YAMATO and MUSASI. Plan changed to DOWN then ENTER (not
+      rerun yet)
+- [ ] Mugen II: the first question is the number of drives (1/2), moved with the ten-key, which BubiZ's -key can't
+      send (main-row 2 is ignored); explore the user-disk question on hardware (idea: a copy of disk B)
+
+## Tester reports (2026-10-21/22, build 20261021b)
+
+- [x] Druaga at 200 lines lost its bottom 20 lines: Lines was switched in the OSD while the game ran (the two
+      screenshots were 8 s apart). Games read the 200/400 switch at start and program the CRTC once; with R05 = 217
+      (400-line value) the 200-line text window ends at (217 - 38) * 2 = buffer line 358 = output line 179, where the
+      picture went black. BubiZ started at 200 lines shows the whole screen. The OSD option is now "Lines (reset)":
+      latched at reset like Boot mode and Model (SharpMZ2500.sv), so a change mid-game waits for the next reset
+- [x] Druaga scroll tearing (attract-mode story/Best 5 panel and in game, "past a certain line"): the game writes
+      SAD0 and HDSC mid-frame; SAD0 was latched at the first line but HDSC was used live, so the lines below the write
+      had the new fine scroll with the old start address and jumped 8 dots whenever HDSC wrapped. HDSC, SAD1, SAD2 and
+      SLN1 are now latched with SAD0 at the first line (one register set per frame, as CSP draws it). KVM capture of
+      the attract mode before/after on mister126 (20261022): the half-screen 8-dot split is gone. Still to do:
+      check in-game scrolling (SPACE at the title, SPACE again starts a game; the maze scrolls as the hero moves),
+      14-title hardware regression (`regression14.txt`), then release
+- [x] Sound dropping during disk access: nothing stalls the CPU or OPN on SD activity (free-running clock enables,
+      no disk term in WAIT). But the WD1793 rotation model asked the HPS for the sector only after the rotational
+      wait, and re-synced the rotation to the sector when the data came, so every sector took the SD latency longer
+      (the disk stood still while the HPS answered). Games that mask interrupts while reading went silent longer than
+      on the real machine. Now (20261102) the sector is fetched as soon as the rotation model has chosen it
+      (STATE_ROT_END -> ROT_PRE -> SEARCH_1 -> SD read) and its first DRQ waits in READ_1/WRITE_1 until the
+      rotational wait has run out (`rot_pf`). Ys III loading ends (sim, `--sd-latency`): no latency 14.60 -> 14.58 s,
+      1 ms 14.93 -> 14.58 s (hidden), 3 ms 17.27 -> 16.83 s (partly: consecutive sectors wait less than 3 ms; hiding
+      that would need the next sector fetched during the current one's transfer). Hardware: Ys III intro timing
+      unchanged against 20261021b. Still worth asking the tester which title it was
+- [ ] Arion "error / press IPL" screen ("Super MZ" loader with beads) when booting with F + drive number at the IPL
+      menu: not reproduced (sim: no disk, mount, F, 1 loads normally with the MAME image). Tester can't reproduce it
+      either; parked
+- [x] Mouse "not working" in the doujin disks: tester's USB board was failing; works
 
 ## Later / optional
 
