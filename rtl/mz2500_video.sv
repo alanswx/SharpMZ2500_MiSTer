@@ -484,6 +484,11 @@ reg         g_hi_prev;
 wire  [6:0] slot_next = x[9:3] + 7'd1;   // slot whose first dot is x + 1 (x = 8s - 1)
 reg   [8:0] g_gy_prev;
 reg         g_hsc;              // this line uses the horizontal scroll (y < SLN1)
+// scroll registers as of the first line: a frame is drawn with one set (CSP draws the whole frame at once). Druaga
+// writes SAD0 and HDSC mid-frame; with HDSC live and SAD0 latched, the lines below jumped 8 dots on every coarse step
+reg   [2:0] f_hdsc;
+reg  [14:0] f_sad1, f_sad2;
+reg   [8:0] f_sln1;
 wire  [8:0] gy = gfx400 ? yb : {1'b0, yb[8:1]};
 
 
@@ -515,16 +520,17 @@ always @(posedge clk) begin
 		if (yo == 0) begin
 			g_chain      <= (SLN1 == 9'd0) ? SAD2 : SAD0;
 			g_line_start <= (SLN1 == 9'd0) ? SAD2 : SAD0;
+			f_hdsc <= HDSC; f_sad1 <= SAD1; f_sad2 <= SAD2; f_sln1 <= SLN1;
 		end
 		else if (gy != g_gy_prev) begin
-			if (gy == SLN1) begin g_chain <= SAD2; g_line_start <= SAD2; end
+			if (gy == f_sln1) begin g_chain <= f_sad2; g_line_start <= f_sad2; end
 			else g_line_start <= g_chain;
 		end
 		else g_chain <= g_line_start;
 		g_gy_prev <= gy;
-		g_hsc     <= gy < SLN1 && !compat;
+		g_hsc     <= gy < (yo == 0 ? SLN1 : f_sln1) && !compat;
 	end
-	else if (g_adv) g_chain <= (g_chain == SAD1) ? 15'd0 : g_chain + 15'd1;
+	else if (g_adv) g_chain <= (g_chain == f_sad1) ? 15'd0 : g_chain + 15'd1;
 end
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -787,7 +793,7 @@ always @(*) begin
 end
 
 // current graphics pixel, with the horizontal scroll (dots inserted at the left)
-wire [3:0] hd = g_hsc ? (m320 ? {HDSC, 1'b0} : {1'b0, HDSC}) : 4'd0;
+wire [3:0] hd = g_hsc ? (m320 ? {f_hdsc, 1'b0} : {1'b0, f_hdsc}) : 4'd0;
 wire signed [5:0] gidx = $signed({3'b0, x[2:0]}) - $signed({2'b0, hd});
 reg  [7:0] gval;
 always @(*) begin
