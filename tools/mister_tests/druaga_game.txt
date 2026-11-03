@@ -1,0 +1,48 @@
+cfg lines 400
+cfg model 2500
+cfg keyboard jp
+cfg bootmode 2500
+load SL/druaga
+wait 125
+key SPACE 0.15
+wait 15
+key SPACE 0.15
+wait 10
+shot dg_start
+key DOWN 1.2
+key KP2 1.2
+key UP 1.2
+key KP8 1.2
+key RIGHT 0.6
+key LEFT 0.6
+key DOWN 1.2
+key KP2 1.2
+key UP 1.2
+key KP8 1.2
+key RIGHT 0.6
+key LEFT 0.6
+key DOWN 1.2
+key KP2 1.2
+key UP 1.2
+key KP8 1.2
+key RIGHT 0.6
+key LEFT 0.6
+key DOWN 1.2
+key KP2 1.2
+key UP 1.2
+key KP8 1.2
+key RIGHT 0.6
+key LEFT 0.6
+key DOWN 1.2
+key KP2 1.2
+key UP 1.2
+key KP8 1.2
+key RIGHT 0.6
+key LEFT 0.6
+key DOWN 1.2
+key KP2 1.2
+key UP 1.2
+key KP8 1.2
+key RIGHT 0.6
+key LEFT 0.6
+shot dg_end

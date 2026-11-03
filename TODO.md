@@ -275,18 +275,17 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 - [ ] Mugen II: wants a "user disk" in drive 1 after the start question; a blank formatted disk is "not a user disk"
       in BubiZ too, and the way to make one wasn't found. The OSD Drive 1 browser opens at the mounted image, so a
       plan can swap disks with F12, ENTER, DOWN..., ENTER (see also the 2026-11-02 note above)
-- [ ] The remaining disk titles past their title screens (`softlist_play2.txt`, 2026-11-02, key sequences from
-      BubiZ). On hardware (20261102): Black Onyx and Fire Crystal (drive 1, any key) to their main menus, Eiyuu
-      Densetsu (name) into the forest, Harley Fox (story pages, N = new game) into the forest, all as in BubiZ.
-      In BubiZ, not yet on hardware: Lizard (1, name, 1) to the class choice, Marvelous (make a character, confirm,
-      name), Doukeshi Satsujin Jiken and Kitahei start by themselves, Fenix is a shell; Sound Gal asks for its
-      "Master Disk on FD1" in BubiZ too. Not games: BASIC v1/v2, Multiplan, COBOL, CP/M, Kaleidoscope, the demo,
-      phone and unk disks, Yuukaku 2 (word processor)
-- [ ] Laydock plan: player B's saved-player list is already open at shot `ud_laydock_b` on hardware, and the plan's
-      ENTER took YAMATO again ("Do not use"); the list has YAMATO and MUSASI. Plan changed to DOWN then ENTER (not
-      rerun yet)
-- [ ] Mugen II: the first question is the number of drives (1/2), moved with the ten-key, which BubiZ's -key can't
-      send (main-row 2 is ignored); explore the user-disk question on hardware (idea: a copy of disk B)
+- [x] The remaining disk titles past their title screens (`softlist_play2.txt`, key sequences from BubiZ), all on
+      hardware (20261102, mister192) as in BubiZ: Black Onyx and Fire Crystal (drive 1, any key) to their main menus,
+      Eiyuu Densetsu (name) into the forest, Harley Fox (story pages, N = new game) into the forest, Lizard (1, name,
+      1) to the class choice, Marvelous (make a character, confirm, name), Doukeshi Satsujin Jiken and Kitahei start by
+      themselves, Fenix is a shell. Sound Gal asks for its "Master Disk on FD1" in BubiZ too. Not games: BASIC v1/v2,
+      Multiplan, COBOL, CP/M, Kaleidoscope, the demo, phone and unk disks, Yuukaku 2 (word processor)
+- [x] Laydock plan: player B now takes MUSASI (DOWN, ENTER), the status page shows both saved players, then menus to
+      SCENE 01 (hardware 20261102)
+- [ ] Laydock stops at a blinking "SCENE 01" (hardware and BubiZ alike; ESC goes back to the menu, SPACE, RETURN, Z,
+      X, SHIFT, F1, CTRL, TAB, 1, UP don't start it). The dump has CRC-error sectors (R=245-247, N=3) on the even
+      tracks 4-9+ as protection and MAME marks track 4 as damaged: probably the protection check
 
 ## Tester reports (2026-10-21/22, build 20261021b)
 
@@ -299,9 +298,9 @@ CPU trace from reset matching the reference emulator for the first few thousand 
       SAD0 and HDSC mid-frame; SAD0 was latched at the first line but HDSC was used live, so the lines below the write
       had the new fine scroll with the old start address and jumped 8 dots whenever HDSC wrapped. HDSC, SAD1, SAD2 and
       SLN1 are now latched with SAD0 at the first line (one register set per frame, as CSP draws it). KVM capture of
-      the attract mode before/after on mister126 (20261022): the half-screen 8-dot split is gone. Still to do:
-      check in-game scrolling (SPACE at the title, SPACE again starts a game; the maze scrolls as the hero moves),
-      14-title hardware regression (`regression14.txt`), then release
+      the attract mode before/after on mister126 (20261022): the half-screen 8-dot split is gone. In game
+      (`druaga_game.txt`, 20261102 on mister192): no torn frame in 1347 captured; 14-title regression matches
+      20261021b. Released as 20261102
 - [x] Sound dropping during disk access: nothing stalls the CPU or OPN on SD activity (free-running clock enables,
       no disk term in WAIT). But the WD1793 rotation model asked the HPS for the sector only after the rotational
       wait, and re-synced the rotation to the sector when the data came, so every sector took the SD latency longer

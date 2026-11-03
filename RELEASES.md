@@ -4,7 +4,7 @@ Builds in `releases/` are tester builds: copy one to `/media/fat/_Computer/` on 
 [README](README.md#getting-started-on-a-mister)). Newest first. Builds not listed here were intermediate and are not
 in the repository.
 
-## Next (not released yet; test build releases/SharpMZ2500_20261102.rbf, local)
+## 20261102
 
 - Graphics scroll registers (fine scroll HDSC, SAD1, SAD2, split line SLN1) are taken once per frame with the start
   address: Druaga's sideways scrolling no longer tears with an 8-dot jump in the lower part of the screen.
@@ -13,6 +13,9 @@ in the repository.
 - Floppy: a sector is fetched from the SD card while the disk turns to it, instead of after: the MiSTer's SD latency
   no longer adds to every sector read (up to about 1 ms is hidden completely), so loads, and the silence some games
   keep while loading, are as long as on the real machine.
+- Checked on hardware: Druaga plays without tearing (KVM capture), the 14-title regression matches 20261021b, and
+  Black Onyx, Fire Crystal, Eiyuu Densetsu, Harley Fox, Lizard, Marvelous, Doukeshi Satsujin Jiken, Kitahei and Fenix
+  get past their title screens as in BubiZ.
 
 ## 20261021b
 
