@@ -5,7 +5,7 @@ cfg keyboard jp
 load SL/tape_snap_dawnptrl
 wait 12
 key C
-wait 318
+wait 338
 shot sl_snap_dawnptrl
 key SPACE 0.3
 wait 8

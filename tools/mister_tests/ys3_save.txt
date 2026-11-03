@@ -62,8 +62,6 @@ key ESC 0.2
 wait 3.5
 key ESC 0.2
 wait 3.5
-key ESC 0.2
-wait 3.5
 key ENTER 0.3
 wait 4
 key ENTER 0.3
