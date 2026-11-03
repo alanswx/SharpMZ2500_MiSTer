@@ -41,6 +41,7 @@ Requires `verilator` 5.x, `ghdl` 5.x with `synth` (Homebrew's `ghdl` has it) and
   --save-state N:FILE    save the whole machine at the start of frame N; --load-state FILE resumes there
                          (same binary and same --fdd images; frame numbers continue)
   --dump-at-cpu-cycle N  write main RAM to out/ram_dump.hex and print the MMU pages (debugging)
+  --dump-at-pc PC:FRAME  the same at the first fetch from PC (hex) at or after FRAME
   +notext / +nogfx       hide the text or graphics layer; +inttrace: log interrupt acknowledges and RETIs
                          (plusargs are not part of a saved state: they don't apply after --load-state)
 ```

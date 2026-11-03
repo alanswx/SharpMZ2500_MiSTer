@@ -272,9 +272,13 @@ CPU trace from reset matching the reference emulator for the first few thousand 
       drive 2 (`tools/blank_d88.py`, SL MGL with both drives) and saves the character, GAME START plays with it. The
       data disk written on hardware is byte-identical to BubiZ's (1646 bytes changed). Menus in Moon Child and
       Mugen II move with the ten-key (2 = down), not the cursor keys
-- [ ] Mugen II: wants a "user disk" in drive 1 after the start question; a blank formatted disk is "not a user disk"
-      in BubiZ too, and the way to make one wasn't found. The OSD Drive 1 browser opens at the mounted image, so a
-      plan can swap disks with F12, ENTER, DOWN..., ENTER (see also the 2026-11-02 note above)
+- [ ] Mugen II user disk (hardware 20261102, sim trace): title, SPACE; drive count 1/2 with ten-key 2 + SPACE; "start
+      the game?" YES asks for the user disk in the last drive, HIT ANY KEY reads its directory sector (C0 H1 R1,
+      through the IPL disk routines) and compares the volume entry's name: disk B says "SCENARIO     Sys", and disk
+      A's code holds "USER    " next to "SCENARIO". Disk B, a copy of disk A and a blank disk are "not a user disk";
+      a copy of disk B with the entry renamed USER is accepted and the game starts, but with an empty party (names
+      and stats FF, all DEAD) and no reaction to RETURN. NO goes back to the question. A real user disk needs party
+      data we don't know how to make (not a core problem: BubiZ rejects the same disks)
 - [x] The remaining disk titles past their title screens (`softlist_play2.txt`, key sequences from BubiZ), all on
       hardware (20261102, mister192) as in BubiZ: Black Onyx and Fire Crystal (drive 1, any key) to their main menus,
       Eiyuu Densetsu (name) into the forest, Harley Fox (story pages, N = new game) into the forest, Lizard (1, name,
@@ -284,8 +288,9 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 - [x] Laydock plan: player B now takes MUSASI (DOWN, ENTER), the status page shows both saved players, then menus to
       SCENE 01 (hardware 20261102)
 - [ ] Laydock stops at a blinking "SCENE 01" (hardware and BubiZ alike; ESC goes back to the menu, SPACE, RETURN, Z,
-      X, SHIFT, F1, CTRL, TAB, 1, UP don't start it). The dump has CRC-error sectors (R=245-247, N=3) on the even
-      tracks 4-9+ as protection and MAME marks track 4 as damaged: probably the protection check
+      X, SHIFT, F1, CTRL, TAB, UP and every letter and digit don't start it). Sim trace of the wait: no disk access,
+      only keyboard scans of rows 4-A (port E8 = 34-3A). The dump has CRC-error sectors (R=245-247, N=3) on the even
+      tracks 4-9+ as protection and MAME marks track 4 as damaged: probably a failed protection check earlier
 
 ## Tester reports (2026-10-21/22, build 20261021b)
 

@@ -72,6 +72,8 @@ struct Options {
     std::string save_file;
     std::string load_file;                // --load-state FILE
     uint64_t    dump_cycle = 0;           // --dump-at-cpu-cycle N: RAM dump + MMU pages (sim.v)
+    int         dump_pc = -1;             // --dump-at-pc PC:FRAME: the same at the first fetch of PC from FRAME on
+    uint32_t    dump_pc_frame = 0;
     struct MouseEv { uint32_t frame; int dx, dy, buttons; };
     std::vector<MouseEv> mouse;           // --mouse FRAME:DX:DY:BUTTONS
 };
@@ -103,6 +105,7 @@ static void usage()
 "  --save-state N:FILE    save the machine state at the start of frame N; --load-state FILE resumes from it\n"
 "                         (give the same --fdd/--fdd-b images; frame numbers continue)\n"
 "  --dump-at-cpu-cycle N  write main RAM (SDRAM model) to out/ram_dump.hex and print the MMU pages at CPU cycle N\n"
+"  --dump-at-pc PC:FRAME  the same at the first instruction fetch from PC (hex) at or after FRAME\n"
 "  --mouse F:DX:DY:B      PS/2 mouse packet at frame F (DX right, DY up, B: 1 left, 2 right), repeatable\n"
 "  --tape FILE            MZT tape image in the data recorder (loaded through ioctl index 1)\n"
 "  --ramimg FILE          RAM image (mz2000_snap .bin) at 0000, run in MZ-2000 mode (ioctl index 2)\n"
@@ -182,6 +185,12 @@ static bool parse_args(int argc, char **argv, Options &o)
             o.mouse.push_back(m);
         }
         else if (a == "--dump-at-cpu-cycle") o.dump_cycle = std::stoull(next(), nullptr, 0);
+        else if (a == "--dump-at-pc") {
+            std::string v = next();
+            size_t c = v.find(':');
+            o.dump_pc = std::stoi(v.substr(0, c), nullptr, 16);
+            if (c != std::string::npos) o.dump_pc_frame = parse_num(v.substr(c + 1));
+        }
         else if (a == "--ipl") o.ipl_file = next();
         else if (a == "--kanji") o.kanji_file = next();
         else if (a[0] == '+') {}   // Verilator plusargs (+notext, +nogfx)
@@ -493,6 +502,9 @@ void Sim::clock()
     if (top->cpu_ce) cpu_cycles++;
     top->dbg_dump = 0;
     if (opt.dump_cycle && cpu_cycles >= opt.dump_cycle && !dump_done) { top->dbg_dump = 1; dump_done = true; }
+    if (opt.dump_pc >= 0 && !dump_done && frame >= opt.dump_pc_frame && !top->cpu_m1_n && prev_m1 && top->cpu_pc == opt.dump_pc) {
+        top->dbg_dump = 1; dump_done = true;
+    }
     sd_step();
     if (opt_save_pending && sd_state == SD_IDLE) { opt_save_pending = false; save_state(); }
     if (fwav && started) {

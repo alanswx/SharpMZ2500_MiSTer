@@ -63,14 +63,15 @@ Tested on a MiSTer (DE10-Nano with SDRAM) against BubiZ-2500 (Takeda's EmuZ-2500
 
 - **MZ-2500 disks**: all 62 MAME 0.228 + 0.289 `mz2500_flop` titles that boot in the emulator boot and match it,
   including the copy-protected Laydock, Macadam, Märchen Veil and Mugen II. Play-tested into the game: Arion, Back to
-  the Future, Balloon Fight, Druaga, Excite Bike, Galaga, Hover Attack, King Flappy, Laydock, Mappy, Märchen Veil,
-  Moon Child, Nobo, Penguin-kun Wars, Re-Birth, Relics, Sangokushi, Nobunaga no Yabou, Triton, Xevious, Ys III (with
-  saving) and more; the Hoshikuzu-bako / Dust Box disk magazine (all issues).
+  the Future, Balloon Fight, Black Onyx, Druaga, Eiyuu Densetsu, Excite Bike, Fire Crystal, Galaga, Harley Fox, Hover
+  Attack, King Flappy, Lizard, Mappy, Märchen Veil, Marvelous, Moon Child, Nobo, Penguin-kun Wars, Re-Birth, Relics,
+  Sangokushi, Nobunaga no Yabou, Triton, Xevious, Ys III (with saving) and more; the Hoshikuzu-bako / Dust Box disk
+  magazine (all issues).
 - **MZ-2000 / MZ-2200 tapes**: all MAME `mz2000_cass` / `mz2200_cass` tapes load, except Jelda and Jelda 2 (bad dumps).
   `mz2000_snap`: all 14 images run. `mz2000_flop`: the C-DOS disks boot.
 - **MZ-80B**: SB-5510/5520 BASIC, Disk BASIC SB-6510/6610/6511 and Vosque from tape, the games disk.
 - Same as in the emulators: F-2 Grand Prix (bad dump: Disk Error), SP-5025 BASIC (never finishes loading), Brave
-  (blank after RETURN).
+  (blank after RETURN), Laydock (menus and saved players work, then it waits at "SCENE 01").
 
 Not supported yet: tape recording (SAVE to tape), drives 3-4 in the standard build (a build option), RS-232C, the
 printer, the SASI hard disk and memory expansions; Mugen II's user disk hasn't been made to work (no way found to
