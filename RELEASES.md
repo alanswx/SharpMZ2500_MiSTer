@@ -1,8 +1,15 @@
 # Release notes
 
-Builds in `releases/` are tester builds: copy one to `/media/fat/_Computer/` on the MiSTer SD card (setup in the
-[README](README.md#getting-started-on-a-mister)). Newest first. Builds not listed here were intermediate and are not
-in the repository.
+Copy the newest `releases/SharpMZ2500_<date>.rbf` to `/media/fat/_Computer/` on the MiSTer SD card (setup, ROMs
+and disks: [README](README.md#getting-started-on-a-mister)). Newest first. Builds up to 20261102 were test builds for
+the first testers; builds not listed here were intermediate and are not in the repository.
+
+## 20261103
+
+- Framework (`sys/`) updated to Template_MiSTer master e901a9f (2026-11-03); the core's logic is the same as
+  20261102. Timing met with the default fitter seed.
+- Checked on hardware: the 14-title regression, the mouse and the Ys III save match 20261102, which had been through
+  the full set of test plans (every MAME disk, tape and RAM-image list, the MZ-2000 games) without regressions.
 
 ## 20261102
 

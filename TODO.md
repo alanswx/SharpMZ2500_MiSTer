@@ -14,7 +14,7 @@ feasibility study (SharpMZ_MiSTer `docs/mz2500.md`): about 17-26 weeks to "runs 
 - [x] Verilator: GHDL synth flow for the VHDL leaves, headless harness (PNG, frame log, CPU/IO trace, typing), `run_tests.sh`
 - [x] Research: refs/ (MAME driver, CSP EmuZ-2500, documents), software/README.md, docs/hardware.md, references.md
 - [x] First Quartus build of the skeleton
-- [ ] Try the RBF on the MiSTer: test pattern in both line modes over HDMI and (200 lines) analogue
+- [x] Try the RBF on the MiSTer: test pattern in both line modes over HDMI and (200 lines) analogue
 
 ## Milestone 1: the IPL's first screen in the sim, matching the reference emulator (done)
 
@@ -49,7 +49,7 @@ CPU trace from reset matching the reference emulator for the first few thousand 
       joystick idle (EF)
 - [x] `ipl_400` / `ipl_200` tests: the "loading error / Press F or C" screen, identical pixel for pixel to BubiZ-2500's
       (400 lines) and MAME's (200 lines) screenshots. It appears at frame 381 here and about 372 in BubiZ.
-- [ ] First Quartus build with the new machine (block RAM: kanji ROM 2 Mbit + main RAM 1 Mbit + GVRAM 1 Mbit)
+- [x] First Quartus build with the new machine (block RAM: kanji ROM 2 Mbit + main RAM 1 Mbit + GVRAM 1 Mbit)
 
 ## Milestone 2: a commercial title boots (done in the sim)
 
@@ -59,7 +59,7 @@ CPU trace from reset matching the reference emulator for the first few thousand 
 - [x] Harness: save/load state, RAM dump at a CPU cycle, layer switches, interrupt trace, WAV, `make fast`
 - [x] Hardware build that fits: kanji ROM moved to SDRAM (raster glyph fetch two cells ahead, through an arbiter
       with the CPU), pixel mixer pipelined; 41% ALMs, 298/553 M10K, timing met (+0.054 ns setup at 85.9 MHz)
-- [ ] Try the RBF on a MiSTer: IPL screen, then Ys III from the OSD drive slots
+- [x] Try the RBF on a MiSTer: IPL screen, then Ys III from the OSD drive slots
 
 ## Milestone 3: the Dust Box disk magazine (done in the sim)
 
@@ -204,7 +204,7 @@ CPU trace from reset matching the reference emulator for the first few thousand 
       scene alike with 5- and 12-frame Enter taps; the core's matrix has no buffering that could drop keys. Use
       ~0.2 s holds a few seconds apart in plans
 - [x] mister_run.sh runs plans detached on the MiSTer (nohup) and polls, so a dropped ssh session doesn't stop them
-- [ ] Release notes, docs for users (ROM file names and where to put them)
+- [x] Release notes, docs for users (ROM file names and where to put them): README "Getting started", RELEASES.md
 
 ## MAME software list (2026-10-16)
 

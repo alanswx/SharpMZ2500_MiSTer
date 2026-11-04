@@ -6,9 +6,9 @@ CRCs; it never downloads ROMs.
 
 | Path | Source | Licence / status | Size |
 |---|---|---|---|
-| `roms/zips/*.zip`, `roms/zips/mz2200ipl/` | copied from `~/dev2/SharpMZ_MiSTer/software/idealine/mz-2x00/` (originally https://www.idealine.info/sharpmz/ ROM pages) | Sharp copyright, dumps | 772 KB |
+| `roms/zips/*.zip`, `roms/zips/mz2200ipl/` | copied from SharpMZ_MiSTer `software/idealine/mz-2x00/` (originally https://www.idealine.info/sharpmz/ ROM pages) | Sharp copyright, dumps | 772 KB |
 | `roms/extracted/<zip>/` | unzipped; CRCs match MAME (docs/roms.md) | same | 1.1 MB |
-| `Sharp Mz-2500.zip` | copied from `~/dev2/SharpMZ_MiSTer/software/` | Champion Pro-Wrestling Special and Flicky as loader + memory dumps for EmuZ's debugger | 100 KB |
+| `Sharp Mz-2500.zip` | copied from SharpMZ_MiSTer `software/` | Champion Pro-Wrestling Special and Flicky as loader + memory dumps for EmuZ's debugger | 100 KB |
 | `archive.org/mz-2500/MZ2500_doujin_free_games.rar` | https://archive.org/download/mz-2500 ("MZ2500 同人自作フリーゲームセット (起動確認済).rar") | Hoshikuzu-bako/Dust Box disk magazine (freely distributed by its authors); also contains Ys III (commercial, Falcom) | 6 MB |
 | `archive.org/mz-2500/extracted/` | unrar of the above: 19 Hoshikuzu-bako D88s + Ys III program/user D88s; all match MAME `mz2500_flop` CRCs | as above | 15 MB |
 | `mame0228/<list>/*.zip`, `mame0228/extracted/<list>/<set>/` | https://archive.org/details/MAME_0.228_Software_List_ROMs_merged (fetched 2026-10-16): every `mz2500` (63, the list's 0.228 name for `mz2500_flop`), `mz2000_cass` (8), `mz2000_flop` (8) and `mz2200_cass` (9) set | mostly commercial; a few freeware/doujin | 39 MB |
