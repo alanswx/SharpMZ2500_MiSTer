@@ -4,6 +4,10 @@ A MiSTer FPGA core for the Sharp MZ-2500 ("Super MZ", 1985) and the budget MZ-25
 + graphics video controller with 640 x 400 and 320 x 200 modes and up to 256 colours, YM2203 sound, 3.5" 2DD floppies,
 kanji ROM, and an MZ-80B / MZ-2000 compatible mode.
 
+This is the development repository (simulation, test harness, research notes). Releases are published in
+[MiSTer-devel/SharpMZ2500_MiSTer](https://github.com/MiSTer-devel/SharpMZ2500_MiSTer), which holds a clean copy of
+the core without them.
+
 Sister project of [SharpMZ_MiSTer](https://github.com/alanswx/SharpMZ_MiSTer) (MZ-80K to MZ-2000), with which it
 shares the T80, 8255, 8253, Z80 PIO, floppy and tape RTL.
 
